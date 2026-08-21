@@ -9,10 +9,12 @@
 
 #include "platform/input/Mouse.h"
 #include "platform/input/Multitouch.h"
+#include "multimodalinput/oh_input_manager.h"
 
 #include "napi/native_api.h"
 
 #include <mutex>
+#include "sys/stat.h"
 #include <string>
 #include <cstring>
 #include <cstdint>
@@ -75,17 +77,18 @@ bool EngineInitDisplay(uint64_t surfaceId)
         LOGE("eglChooseConfig FAILED num=%{public}d err=0x%{public}x", numConfigs, eglGetError());
         return false;
     }
-
-    EGLSurface surface = eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)g_engine.nativeWindow, nullptr);
-    if (surface == EGL_NO_SURFACE) {
-        LOGE("eglCreateWindowSurface FAILED err=0x%{public}x", eglGetError());
-        return false;
-    }
-
+    
     EGLint ctxAttribs[] = {
         EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
+
+    EGLSurface surface = eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)g_engine.nativeWindow, ctxAttribs);
+    if (surface == EGL_NO_SURFACE) {
+        LOGE("eglCreateWindowSurface FAILED err=0x%{public}x", eglGetError());
+        return false;
+    }
+    
     EGLContext context = eglCreateContext(dpy, config, EGL_NO_CONTEXT, ctxAttribs);
     if (context == EGL_NO_CONTEXT) {
         LOGE("eglCreateContext FAILED err=0x%{public}x", eglGetError());
@@ -176,17 +179,36 @@ int32_t GetIntArg(napi_env env, napi_value arg, int32_t def)
 
 void PreseedOptionsFile(const std::string& filesDir)
 {
-//    std::string path = filesDir + "/options.txt";
-//    FILE* f = fopen(path.c_str(), "w");
-//    if (!f) {
-//        LOGE("PreseedOptionsFile failed to open %{public}s", path.c_str());
-//        return;
-//    }
-//    fprintf(f, "options.firstLaunch:false\n");
-//    fprintf(f, "options.username:StevePi\n");
-//    fprintf(f, "options.useTouchscreen:true\n");
-//    fclose(f);
-//    LOGI("PreseedOptionsFile written: %{public}s", path.c_str());
+    std::string path = filesDir + "/options.txt";
+    
+    struct stat buffer;
+    if (stat(path.c_str(), &buffer) == 0) {
+        return;
+    }
+    
+    FILE* f = fopen(path.c_str(), "w");
+    if (!f) {
+        LOGE("PreseedOptionsFile failed to open %{public}s", path.c_str());
+        return;
+    }
+    fprintf(f, "options.firstLaunch:false\n");
+    fprintf(f, "options.username:SteveOHOS\n");
+    fprintf(f, "options.useTouchscreen:true\n");
+    fclose(f);
+    LOGI("PreseedOptionsFile written: %{public}s", path.c_str());
+}
+
+void OnKeyEventCallback(const Input_KeyEvent* keyEvent) {
+    int32_t action = OH_Input_GetKeyEventAction(keyEvent);
+    int32_t keyCode = OH_Input_GetKeyEventKeyCode(keyEvent);
+    int64_t actionTime = OH_Input_GetKeyEventActionTime(keyEvent);
+    
+    // action: 按键动作 (例如: 按下/抬起)
+    // keyCode: 按键的键码值
+    if (action == 0) { // 假设 0 代表按下
+        LOGI("Key pressed, keyCode: %{public}d", keyCode);
+        Keyboard::feed(keyCode, 1);
+    }
 }
 
 } // namespace
@@ -240,6 +262,7 @@ static napi_value InitRender(napi_env env, napi_callback_info info)
 
     app->App::init(g_engine.appContext);
     app->setSize(g_engine.width, g_engine.height);
+    OH_Input_AddKeyEventMonitor(OnKeyEventCallback);
 
     LOGI("InitRender OK size=%{public}dx%{public}d", g_engine.width, g_engine.height);
 
@@ -301,6 +324,7 @@ static napi_value DestroyRender(napi_env env, napi_callback_info info)
         g_engine.app = nullptr;
     }
     EngineTermDisplay();
+    OH_Input_RemoveKeyEventMonitor(OnKeyEventCallback);
     return nullptr;
 }
 

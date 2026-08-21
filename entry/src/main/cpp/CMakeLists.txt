@@ -41,6 +41,7 @@ add_library(entry SHARED
 target_compile_options(entry PRIVATE -DOHOS -Wno-narrowing)
 
 target_link_libraries(entry PUBLIC
+    libohinput.so
     libace_napi.z.so
     libhilog_ndk.z.so
     libEGL.so
