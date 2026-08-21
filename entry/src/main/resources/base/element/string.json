@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "MCPE module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "MCPE ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MCPE"
+    }
+  ]
+}
