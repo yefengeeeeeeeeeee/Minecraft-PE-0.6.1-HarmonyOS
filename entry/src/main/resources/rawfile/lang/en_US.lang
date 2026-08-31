@@ -127,6 +127,7 @@ disconnect.quitting=Quitting
 disconnect.endOfStream=End of stream
 disconnect.overflow=Buffer overflow
 
+options.username=Username
 options.off=OFF
 options.on=ON
 options.title=Options

@@ -9,7 +9,7 @@
 
 #include "platform/input/Mouse.h"
 #include "platform/input/Multitouch.h"
-#include "multimodalinput/oh_input_manager.h"
+#include "platform/input/Keyboard.h"
 
 #include "napi/native_api.h"
 
@@ -198,19 +198,6 @@ void PreseedOptionsFile(const std::string& filesDir)
     LOGI("PreseedOptionsFile written: %{public}s", path.c_str());
 }
 
-void OnKeyEventCallback(const Input_KeyEvent* keyEvent) {
-    int32_t action = OH_Input_GetKeyEventAction(keyEvent);
-    int32_t keyCode = OH_Input_GetKeyEventKeyCode(keyEvent);
-    int64_t actionTime = OH_Input_GetKeyEventActionTime(keyEvent);
-    
-    // action: 按键动作 (例如: 按下/抬起)
-    // keyCode: 按键的键码值
-    if (action == 0) { // 假设 0 代表按下
-        LOGI("Key pressed, keyCode: %{public}d", keyCode);
-        Keyboard::feed(keyCode, 1);
-    }
-}
-
 } // namespace
 
 static napi_value InitRender(napi_env env, napi_callback_info info)
@@ -262,7 +249,6 @@ static napi_value InitRender(napi_env env, napi_callback_info info)
 
     app->App::init(g_engine.appContext);
     app->setSize(g_engine.width, g_engine.height);
-    OH_Input_AddKeyEventMonitor(OnKeyEventCallback);
 
     LOGI("InitRender OK size=%{public}dx%{public}d", g_engine.width, g_engine.height);
 
@@ -316,6 +302,25 @@ static napi_value RenderTouch(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+static napi_value handleKeyBoard(napi_env env, napi_callback_info info)
+{
+    size_t argc = 2;
+    napi_value args[2] = { nullptr };
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    
+    int32_t action = 0;
+    int32_t keyCode = 0;
+    if (argc >= 1) napi_get_value_int32(env, args[0], &action);
+    if (argc >= 2) napi_get_value_int32(env, args[1], &keyCode);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    
+    LOGI("RenderTouch action=%{public}d keyCode=%{public}d", action, keyCode);
+    bool isDown = action == 0;
+    Keyboard::feed(keyCode, isDown);
+    return nullptr;
+}
+
 static napi_value DestroyRender(napi_env env, napi_callback_info info)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -324,7 +329,6 @@ static napi_value DestroyRender(napi_env env, napi_callback_info info)
         g_engine.app = nullptr;
     }
     EngineTermDisplay();
-    OH_Input_RemoveKeyEventMonitor(OnKeyEventCallback);
     return nullptr;
 }
 
@@ -334,6 +338,7 @@ static napi_value Init(napi_env env, napi_value exports)
         {"initRender", nullptr, InitRender, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"renderFrame", nullptr, RenderFrame, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"renderTouch", nullptr, RenderTouch, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"handleKeyBoard", nullptr, handleKeyBoard, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"destroyRender", nullptr, DestroyRender, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);

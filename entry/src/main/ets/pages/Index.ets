@@ -9,7 +9,20 @@ struct Index {
   private surfaceId: string = '';
   private renderStarted: boolean = false;
   private timerId: number = -1;
+  private containerId: string = 'keyboard-container'
   @State status: string = 'idle';
+
+  private requestFocus() {
+    // 通过 UIContext 获取 FocusController 并请求焦点
+    this.getUIContext().getFocusController().requestFocus(this.containerId)
+  }
+
+  aboutToAppear() {
+    // 也可以在这里延迟请求焦点，确保组件已挂载
+    setTimeout(() => {
+      this.requestFocus()
+    }, 100)
+  }
 
   aboutToDisappear(): void {
     if (this.timerId >= 0) {
@@ -28,6 +41,7 @@ struct Index {
     this.surfaceId = sid;
     this.status = 'surfaceId=' + sid;
     this.startRender();
+    this.requestFocus()
   }
 
   startRender(): void {
@@ -88,6 +102,18 @@ struct Index {
         .padding(4)
         .position({ x: 4, y: 4 })
     }
+    .id(this.containerId)               // 设置 ID 以便请求焦点
+    .focusable(true)                    // 允许获得焦点
+    .focusOnTouch(true)                 // 点击时自动获得焦点（可选）
+    .onKeyEvent((event: KeyEvent) => {
+      // 更新状态显示
+      this.status = `KeyCode: ${event.keyCode}`
+
+      testNapi.handleKeyBoard(event.type, event.keyCode);
+
+      // 返回 true 表示消费该事件，阻止默认行为
+      return true
+    })
     .width('100%')
     .height('100%')
     .backgroundColor('#101418')
