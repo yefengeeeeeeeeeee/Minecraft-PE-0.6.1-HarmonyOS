@@ -186,7 +186,7 @@ void EntityRenderer::renderShadow(Entity* e, float x, float y, float z, float po
 	//Textures* textures = entityRenderDispatcher->textures;
 	//textures->bind(textures->loadTexture("%clamp%/environment/shadow.png"));
 	Textures* textures = entityRenderDispatcher->textures;
-	textures->loadAndBindTexture("/misc/shadow.png"); 
+	textures->loadAndBindTexture("misc/shadow.png"); 
     
     
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

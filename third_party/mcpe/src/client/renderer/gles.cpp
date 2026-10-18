@@ -417,6 +417,13 @@ void drawArrayVT(int bufferId, int vertices, int vertexSize /* = 36 */, unsigned
         glDisableVertexAttribArray(colLoc);
         glVertexAttrib4f(colLoc, 1.0f, 1.0f, 1.0f, 1.0f);
     }
+    // 该函数当前仅用于 sky/star/void 这类「无 UV」静态缓冲（tesselate 时只写了
+    // vertex()，VBO 里的 u,v 是脏内存）。绝不能启用纹理坐标属性去读脏数据——
+    // 一旦 u_useTexture 为真，整个图集就会被平铺到天上（花屏）。
+    if (texLoc != -1) {
+        glDisableVertexAttribArray(texLoc);
+        glVertexAttrib2f(texLoc, 0.0f, 0.0f);
+    }
     glDrawArrays(mode, 0, vertices);
     if (posLoc != -1) glDisableVertexAttribArray(posLoc);
     if (texLoc != -1) glDisableVertexAttribArray(texLoc);

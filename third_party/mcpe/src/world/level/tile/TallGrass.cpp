@@ -1,6 +1,7 @@
 #include "TallGrass.h"
 #include "../FoliageColor.h"
 #include "../GrassColor.h"
+#include "../biome/BiomeSource.h"
 #include "../../entity/player/Player.h"
 #include "../../item/Item.h"
 #include "../../item/ShearsItem.h"
@@ -41,10 +42,16 @@ int TallGrass::getColor( int auxData ) {
 }
 
 int TallGrass::getColor( LevelSource* level, int x, int y, int z ) {
+	// 防御：世界进入早期 Chunk::rebuild 可能先于 biomeSource/温度场就绪被调用，
+	// 任一为空时直接回退，避免空指针崩溃（faultlogger: TallGrass::getColor +136）。
+	BiomeSource* bs = level ? level->getBiomeSource() : nullptr;
+	if (bs == nullptr || bs->temperatures == nullptr || bs->downfalls == nullptr) {
+		return GrassColor::useTint ? GrassColor::get(0.5f, 1.0f) : 0x339933;
+	}
 	int d = level->getData(x, y, z);
 	if (d == DEAD_SHRUB); //return 0xffffff; // i removed this to make it accurate to beta 1.6.6 instead of early java release versions
-	float temp = level->getBiomeSource()->temperatures[0]; // shredder added
-	float rain = level->getBiomeSource()->downfalls[0]; // shredder added
+	float temp = bs->temperatures[0]; // shredder added
+	float rain = bs->downfalls[0]; // shredder added
 	if (!GrassColor::useTint && d == DEAD_SHRUB){
 		return 0xffffff;
 	}

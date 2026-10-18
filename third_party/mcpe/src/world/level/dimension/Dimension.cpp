@@ -69,7 +69,7 @@ float Dimension::s_brightness = 0.5f;
 
 void Dimension::updateLightRamp()
 {
-	float ambient = 0.02f;
+	float ambient = 0.05f;
 	float gamma = Dimension::s_brightness;
 	for (int i = 0; i <= 15; ++i) {
 		// Pow curve: nearly black at low light, full white at light 15. The

@@ -1055,6 +1055,26 @@ void Minecraft::tickInput() {
 		} else {
 			gameMode->stopDestroyBlock();
 		}
+
+		// 弓箭（bow）蓄力后需要「松手」才能射出。桌面端靠松开鼠标右键触发
+		// releaseUsingItem，但触屏分支的 tickBuild 只负责识别「按住/松开」来
+		// 分类 build/turn/destroy 动作，从不释放正在使用的物品，导致弓箭拉满
+		// 却射不出去。这里在触屏路径补上：若玩家正在蓄力（isUsingItem），且
+		// 本 tick 有手指抬起（DATA_UP），则释放使用中的物品（射出弓箭）。
+		if (player && player->isUsingItem()) {
+			bool released = false;
+			Multitouch::rewind();
+			while (Multitouch::next()) {
+				MouseAction& m = Multitouch::getEvent();
+				if (m.action != MouseAction::ACTION_MOVE && m.data == MouseAction::DATA_UP) {
+					released = true;
+					break;
+				}
+			}
+			if (released) {
+				gameMode->releaseUsingItem(player);
+			}
+		}
 	} else {
 		// Desktop: left mouse = destroy/attack
 		if (Mouse::isButtonDown(MouseAction::ACTION_LEFT)) {

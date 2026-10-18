@@ -1231,22 +1231,27 @@ void LevelRenderer::renderSky(float alpha) {
 	float ss = 30.0f;
 
 
-		textures->loadAndBindTexture("terrain/sun.png");
-		t.begin();
-		t.vertexUV(-ss, 100.0f, -ss, 0.0f, 0.0f);
-		t.vertexUV(ss, 100.0f, -ss, 1.0f, 0.0f);
-		t.vertexUV(ss, 100.0f, ss, 1.0f, 1.0f);
-		t.vertexUV(-ss, 100.0f, ss, 0.0f, 1.0f);
-		t.draw();
+		// 加载失败时不得绘制：loadAndBindTexture 失败不会改绑定，
+		// 旧绑定（通常是 terrain.png 图集）会被 0..1 的 UV 拉满整个天空，
+		// 呈现出「整个图集平铺在屏幕上」的花屏。
+		if (textures->loadAndBindTexture("terrain/sun.png") != Textures::InvalidId) {
+			t.begin();
+			t.vertexUV(-ss, 100.0f, -ss, 0.0f, 0.0f);
+			t.vertexUV(ss, 100.0f, -ss, 1.0f, 0.0f);
+			t.vertexUV(ss, 100.0f, ss, 1.0f, 1.0f);
+			t.vertexUV(-ss, 100.0f, ss, 0.0f, 1.0f);
+			t.draw();
+		}
 
 		ss = 20.0f;
-		textures->loadAndBindTexture("terrain/moon.png");
-		t.begin();
-		t.vertexUV(-ss, -100.0f, ss, 1.0f, 1.0f);
-		t.vertexUV(ss, -100.0f, ss, 0.0f, 1.0f);
-		t.vertexUV(ss, -100.0f, -ss, 0.0f, 0.0f);
-		t.vertexUV(-ss, -100.0f, -ss, 1.0f, 0.0f);
-		t.draw();
+		if (textures->loadAndBindTexture("terrain/moon.png") != Textures::InvalidId) {
+			t.begin();
+			t.vertexUV(-ss, -100.0f, ss, 1.0f, 1.0f);
+			t.vertexUV(ss, -100.0f, ss, 0.0f, 1.0f);
+			t.vertexUV(ss, -100.0f, -ss, 0.0f, 0.0f);
+			t.vertexUV(-ss, -100.0f, -ss, 1.0f, 0.0f);
+			t.draw();
+		}
 	
 
 	glDisable(GL_TEXTURE_2D);

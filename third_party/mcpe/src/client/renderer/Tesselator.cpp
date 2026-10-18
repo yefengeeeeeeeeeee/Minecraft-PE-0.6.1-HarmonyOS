@@ -306,6 +306,11 @@ void Tesselator::vertex( float x, float y, float z )
 	if (hasTexture) {
 		vertex.u = u;
 		vertex.v = v;
+	} else {
+		// 必须清零：_varray 是复用内存，未写 UV 的缓冲（sky/star/void）
+		// 会把上一次 tessellation 的脏 UV 带进 VBO。
+		vertex.u = 0.0f;
+		vertex.v = 0.0f;
 	}
 	if (hasColor) {
 		vertex.color = _color;

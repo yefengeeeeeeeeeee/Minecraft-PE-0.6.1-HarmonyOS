@@ -339,22 +339,178 @@ static napi_value RenderTouch(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+// 把鸿蒙 KeyCode（@ohos.multimodalInput.keyCode）映射成引擎期望的 ASCII 键码。
+// 引擎侧 Keyboard / Options 默认键码是 ASCII：W=87 A=65 S=83 D=68 SPACE=32 SHIFT=10 E=69 Q=81 T=84 ...
+// 鸿蒙枚举则是 KEYCODE_A=2017 ... KEYCODE_W=2039，二者完全不是一套编码，必须显式转换。
+static int OhosKeyCodeToMcpe(int keyCode)
+{
+    switch (keyCode) {
+        // 字母 A-Z：2017..2042 -> 65..90
+        case 2017: return 'A';
+        case 2018: return 'B';
+        case 2019: return 'C';
+        case 2020: return 'D';
+        case 2021: return 'E';
+        case 2022: return 'F';
+        case 2023: return 'G';
+        case 2024: return 'H';
+        case 2025: return 'I';
+        case 2026: return 'J';
+        case 2027: return 'K';
+        case 2028: return 'L';
+        case 2029: return 'M';
+        case 2030: return 'N';
+        case 2031: return 'O';
+        case 2032: return 'P';
+        case 2033: return 'Q';
+        case 2034: return 'R';
+        case 2035: return 'S';
+        case 2036: return 'T';
+        case 2037: return 'U';
+        case 2038: return 'V';
+        case 2039: return 'W';
+        case 2040: return 'X';
+        case 2041: return 'Y';
+        case 2042: return 'Z';
+        // 数字 0-9：2000..2009 -> 48..57
+        case 2000: return '0';
+        case 2001: return '1';
+        case 2002: return '2';
+        case 2003: return '3';
+        case 2004: return '4';
+        case 2005: return '5';
+        case 2006: return '6';
+        case 2007: return '7';
+        case 2008: return '8';
+        case 2009: return '9';
+        // 空格 / 回车 / Tab
+        case 2050: return ' ';
+        case 2054: return 13;   // KEYCODE_ENTER -> RETURN
+        case 2049: return 9;    // KEYCODE_TAB
+        // 功能键
+        case 2090: return 112;  // F1
+        case 2091: return 113;  // F2
+        case 2092: return 114;  // F3
+        case 2093: return 115;  // F4
+        case 2094: return 116;  // F5
+        case 2095: return 117;  // F6
+        case 2096: return 118;  // F7
+        case 2097: return 119;  // F8
+        case 2098: return 120;  // F9
+        case 2099: return 121;  // F10
+        case 2100: return 122;  // F11
+        case 2101: return 123;  // F12
+        // Escape / 退格 / 方向键（方向键映射到引擎自定义：左37 上38 右39 下40，见 keyMenu* 默认值）
+        case 2070: return 27;   // ESCAPE
+        case 2055: return 8;    // DEL -> BACKSPACE
+        case 2071: return 127;  // FORWARD_DEL
+        case 2012: return 38;   // DPAD_UP
+        case 2013: return 40;   // DPAD_DOWN
+        case 2014: return 37;   // DPAD_LEFT
+        case 2015: return 39;   // DPAD_RIGHT
+        // 左右 Shift -> 10（引擎 KEY_LSHIFT）
+        case 2047:
+        case 2048: return 10;
+        // 左右 Ctrl -> 232（引擎 KEY_LEFT_CTRL）
+        case 2072:
+        case 2073: return 232;
+        default:
+            return -1;
+    }
+}
+
 static napi_value handleKeyBoard(napi_env env, napi_callback_info info)
 {
     size_t argc = 2;
     napi_value args[2] = { nullptr };
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
-    
+
     int32_t action = 0;
     int32_t keyCode = 0;
     if (argc >= 1) napi_get_value_int32(env, args[0], &action);
     if (argc >= 2) napi_get_value_int32(env, args[1], &keyCode);
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    
-    LOGI("RenderTouch action=%{public}d keyCode=%{public}d", action, keyCode);
-    bool isDown = action == 0;
-    Keyboard::feed(keyCode, isDown);
+
+    // 鸿蒙 KeyType: Down=0, Up=1, CANCEL=3（API 26+ 系统补发）。
+    // 只接受明确的 Down / Up；CANCEL 等其他值一律忽略，避免把
+    // 「按住移动」的持续状态意外清成 KEYUP，导致无法长按持续行动。
+    bool isDown;
+    if (action == 0) {
+        isDown = true;
+    } else if (action == 1) {
+        isDown = false;
+    } else {
+        return nullptr; // CANCEL(3) 等：忽略
+    }
+
+    int mcpeKey = OhosKeyCodeToMcpe(keyCode);
+    if (mcpeKey < 0) {
+        return nullptr;
+    }
+
+    // 关键优化：长按一个键时，鸿蒙会高频触发 repeat Down（每秒数十次）。
+    // 若每次都 feed，会 1) 让 Keyboard::_inputs 队列暴涨、2) 跨 NAPI + 抢 g_mutex
+    // 频繁打断渲染循环，导致「按住前进却一卡一卡」。
+    // 因此：DOWN 且该键已经处于 DOWN 状态 → 直接忽略（重复按下）；UP 才透传。
+    bool alreadyDown = Keyboard::isKeyDown(mcpeKey);
+    if (isDown && alreadyDown) {
+        return nullptr; // repeat Down，去重
+    }
+
+    LOGI("handleKeyBoard keyCode=%{public}d -> mcpeKey=%{public}d %{public}s",
+         keyCode, mcpeKey, isDown ? "DOWN" : "UP");
+
+    // Keyboard::feed 的第二个参数期望 KeyboardAction::KEYDOWN(1)/KEYUP(0)
+    Keyboard::feed((unsigned char)mcpeKey, isDown ? KeyboardAction::KEYDOWN : KeyboardAction::KEYUP);
+    return nullptr;
+}
+
+static napi_value handleKeyText(napi_env env, napi_callback_info info)
+{
+    size_t argc = 2;
+    napi_value args[2] = { nullptr };
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 1) {
+        return nullptr;
+    }
+
+    std::string text = GetStringArg(env, args[0]);
+    int32_t keyCode = (argc >= 2) ? GetIntArg(env, args[1], -1) : -1;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    // 关键：鸿蒙的 event.keyText 对「功能键 / 移动键」返回的是键名（如 "Shift"、
+    // "Space"、"KEYCODE_I"），对字母返回单字符 "w"。如果无脑逐字符投递，会把
+    // "Shift" 拆成 'S','h','i','f','t' 五个字符打进告示牌 / 聊天框，出现乱符号。
+    // 策略：
+    //   1) keyText 是单个可打印 ASCII 字符（真实键盘 / IME 的正常情况）→ 直接投递；
+    //   2) 否则用 keyCode 映射表回退成 ASCII 字符投递（模拟器 uinput 的
+    //      keyText 形如 "KEYCODE_I"，必须靠 keyCode 才能得到真实字符）。
+    char ch = 0;
+    if (text.size() == 1) {
+        unsigned char c = (unsigned char)text[0];
+        if (c >= 32 && c < 127) {
+            ch = (char)c;
+        }
+    } else if (keyCode >= 0) {
+        int mapped = OhosKeyCodeToMcpe(keyCode);
+        if (mapped >= 32 && mapped < 127) {
+            ch = (char)mapped;
+        }
+    }
+    // 统一转小写：MCPE 0.6.1 的文本输入（聊天 / 告示牌 / 命名）本身不区分大小写，
+    // 引擎内所有字母都应是小写。OhosKeyCodeToMcpe 对字母返回大写 ASCII（'A'=65），
+    // 模拟器 uinput 的 keyText 是 "KEYCODE_X" 键名，走 keyCode 回退必然得到大写字母，
+    // 若不转小写，告示牌上就会显示全大写。真实键盘 keyText 单字符（如 "w"）已是小写，
+    // 这里统一再转一次也无副作用。
+    if (ch >= 'A' && ch <= 'Z') {
+        ch = (char)(ch - 'A' + 'a');
+    }
+    if (ch) {
+        Keyboard::feedText(ch);
+    }
     return nullptr;
 }
 
@@ -376,6 +532,7 @@ static napi_value Init(napi_env env, napi_value exports)
         {"renderFrame", nullptr, RenderFrame, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"renderTouch", nullptr, RenderTouch, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"handleKeyBoard", nullptr, handleKeyBoard, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"handleKeyText", nullptr, handleKeyText, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"destroyRender", nullptr, DestroyRender, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
