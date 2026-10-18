@@ -4,6 +4,7 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <GLES2/gl2.h>
 #include <native_window/external_window.h>
 #include <hilog/log.h>
 
@@ -42,12 +43,21 @@ OhosEngine g_engine;
 AppPlatform_ohos g_platform;
 std::mutex g_mutex;
 
-bool EngineInitDisplay(uint64_t surfaceId)
+bool EngineInitDisplay(uint64_t surfaceId, int32_t wantWidth, int32_t wantHeight)
 {
     int32_t ret = OH_NativeWindow_CreateNativeWindowFromSurfaceId(surfaceId, &g_engine.nativeWindow);
     if (ret != 0 || g_engine.nativeWindow == nullptr) {
         LOGE("CreateNativeWindowFromSurfaceId FAILED ret=%{public}d", ret);
         return false;
+    }
+
+    // 必须把 XComponent 的实际尺寸写进 NativeWindow 的 buffer 几何，
+    // 否则 eglSwapBuffers 时 buffer 尺寸与视口/裁剪不一致，表现为画面撕裂/拉伸/花屏。
+    if (wantWidth > 0 && wantHeight > 0) {
+        int32_t optRet = OH_NativeWindow_NativeWindowHandleOpt(
+            g_engine.nativeWindow, SET_BUFFER_GEOMETRY, wantWidth, wantHeight);
+        LOGI("SET_BUFFER_GEOMETRY %{public}dx%{public}d ret=%{public}d",
+             wantWidth, wantHeight, optRet);
     }
 
     EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -83,7 +93,10 @@ bool EngineInitDisplay(uint64_t surfaceId)
         EGL_NONE
     };
 
-    EGLSurface surface = eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)g_engine.nativeWindow, ctxAttribs);
+    // 注意：第 4 个参数是「surface 属性表」，不能塞 context 属性（EGL_CONTEXT_CLIENT_VERSION
+    // 不是合法 surface 属性，严格实现会直接返回 EGL_BAD_ATTRIBUTE → EGL_NO_SURFACE）。
+    EGLSurface surface = eglCreateWindowSurface(dpy, config,
+        (EGLNativeWindowType)g_engine.nativeWindow, nullptr);
     if (surface == EGL_NO_SURFACE) {
         LOGE("eglCreateWindowSurface FAILED err=0x%{public}x", eglGetError());
         return false;
@@ -104,6 +117,18 @@ bool EngineInitDisplay(uint64_t surfaceId)
     eglQuerySurface(dpy, surface, EGL_WIDTH, &w);
     eglQuerySurface(dpy, surface, EGL_HEIGHT, &h);
     LOGI("surface size=%{public}dx%{public}d", w, h);
+
+    // 一次性打印 GL 环境：定位渲染问题先看这几行
+    LOGI("GL_VENDOR=%{public}s", (const char*)glGetString(GL_VENDOR));
+    LOGI("GL_RENDERER=%{public}s", (const char*)glGetString(GL_RENDERER));
+    LOGI("GL_VERSION=%{public}s", (const char*)glGetString(GL_VERSION));
+    LOGI("GL_SL_VERSION=%{public}s", (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION));
+    EGLint depthBits = 0, stencilBits = 0, sampleBits = 0;
+    eglGetConfigAttrib(dpy, config, EGL_DEPTH_SIZE, &depthBits);
+    eglGetConfigAttrib(dpy, config, EGL_STENCIL_SIZE, &stencilBits);
+    eglGetConfigAttrib(dpy, config, EGL_SAMPLES, &sampleBits);
+    LOGI("EGLConfig depth=%{public}d stencil=%{public}d samples=%{public}d",
+         depthBits, stencilBits, sampleBits);
 
     g_engine.display = dpy;
     g_engine.surface = surface;
@@ -226,7 +251,7 @@ static napi_value InitRender(napi_env env, napi_callback_info info)
 
     g_platform.init(env, jsResMgr, filesDir, screenW, screenH);
 
-    if (!EngineInitDisplay(surfaceId)) {
+    if (!EngineInitDisplay(surfaceId, screenW, screenH)) {
         LOGE("InitRender: EngineInitDisplay FAILED");
         return nullptr;
     }
@@ -260,9 +285,21 @@ static napi_value InitRender(napi_env env, napi_callback_info info)
 static napi_value RenderFrame(napi_env env, napi_callback_info info)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_engine.app && g_engine.inited) {
-        g_engine.app->update();
+    if (!g_engine.app || !g_engine.inited) {
+        return nullptr;
     }
+    // 渲染循环可能被切到别的线程 / 上下文被系统回收（切前后台、surface 重建），
+    // 这里每帧兜底一次，避免所有 GL 调用静默失败导致画面错乱。
+    if (eglGetCurrentContext() != g_engine.context) {
+        if (!eglMakeCurrent(g_engine.display, g_engine.surface, g_engine.surface, g_engine.context)) {
+            static int s_makeCurrentFail = 0;
+            if ((s_makeCurrentFail++ % 60) == 0) {
+                LOGE("RenderFrame: eglMakeCurrent FAILED err=0x%{public}x", eglGetError());
+            }
+            return nullptr;
+        }
+    }
+    g_engine.app->update();
     return nullptr;
 }
 

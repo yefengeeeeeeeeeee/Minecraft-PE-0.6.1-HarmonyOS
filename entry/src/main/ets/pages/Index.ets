@@ -1,6 +1,8 @@
 import testNapi from 'libentry.so';
 import { common } from '@kit.AbilityKit';
+import { inputMethod } from '@kit.IMEKit';
 import { display } from '@kit.ArkUI';
+
 
 @Entry
 @Component

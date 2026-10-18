@@ -1892,6 +1892,11 @@ bool RakPeer::Ping( const char* host, unsigned short remotePort, bool onlyReplyO
 
 	// No timestamp for 255.255.255.255
 	unsigned int realIndex = GetRakNetSocketFromUserConnectionSocketIndex(connectionSocketIndex);
+	// [OHOS] socketList 为空（Startup 失败）时 GetRakNetSocketFromUserConnectionSocketIndex 返回 (unsigned)-1，
+	// 直接下标取 socketList 会越界解引用导致 SIGSEGV
+	if (realIndex >= socketList.Size())
+		return false;
+
 
 	SystemAddress systemAddress;
 	systemAddress.FromStringExplicitPort(host,remotePort, socketList[realIndex]->boundAddress.GetIPVersion());
@@ -2436,6 +2441,11 @@ void RakPeer::SendTTL( const char* host, unsigned short remotePort, int ttl, uns
 	fakeData[0]=0;
 	fakeData[1]=1;
 	unsigned int realIndex = GetRakNetSocketFromUserConnectionSocketIndex(connectionSocketIndex);
+	// [OHOS] socketList 为空（Startup 失败）时 GetRakNetSocketFromUserConnectionSocketIndex 返回 (unsigned)-1，
+	// 直接下标取 socketList 会越界解引用导致 SIGSEGV
+	if (realIndex >= socketList.Size())
+		return;
+
 	SystemAddress systemAddress = socketList[realIndex]->boundAddress;
 	systemAddress.FromStringExplicitPort(host,remotePort);
 	SocketLayer::SendToTTL( socketList[realIndex]->s, (char*)fakeData, 2, systemAddress, ttl );
@@ -2706,6 +2716,11 @@ bool RakPeer::SendOutOfBand(const char *host, unsigned short remotePort, const c
 	}
 	
 	unsigned int realIndex = GetRakNetSocketFromUserConnectionSocketIndex(connectionSocketIndex);
+	// [OHOS] socketList 为空（Startup 失败）时 GetRakNetSocketFromUserConnectionSocketIndex 返回 (unsigned)-1，
+	// 直接下标取 socketList 会越界解引用导致 SIGSEGV
+	if (realIndex >= socketList.Size())
+		return false;
+
 
 	SystemAddress systemAddress;
 	systemAddress.FromStringExplicitPort(host,remotePort, socketList[realIndex]->boundAddress.GetIPVersion());

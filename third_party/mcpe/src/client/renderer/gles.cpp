@@ -42,7 +42,14 @@ void __gluMakeIdentityf(GLfloat m[16]) {
 static Shader* defaultShader = nullptr;
 
 static void ensureShaders() {
-    if (defaultShader && defaultShader->isLoaded()) return;
+    if (defaultShader && defaultShader->isLoaded()) {
+        // 如果中途有别的 Shader 被 bind/unbind 过，currentShader 会失配，
+        // 后续所有绘制都会在无 program 的状态下进行（画面全黑或残留上一帧）。
+        if (currentShader != defaultShader) {
+            defaultShader->bind();
+        }
+        return;
+    }
 
     defaultShader = createDefaultShader();
     if (defaultShader) {
@@ -62,9 +69,10 @@ void anGenBuffers(GLsizei n, GLuint* buffers) {
 #ifdef __EMSCRIPTEN__
     glGenBuffers(n, buffers);
 #else
-    static GLuint k = 1;
-    for (int i = 0; i < n; ++i)
-        buffers[i] = ++k;
+    // GLES2 规范要求 glBindBuffer 只能接受 glGenBuffers 返回的名字，
+    // 早期用假 id 的写法在严格驱动上会触发 GL_INVALID_OPERATION，
+    // 导致缓冲区实际未绑定 → 顶点属性指针变成野偏移（典型花屏）。
+    glGenBuffers(n, buffers);
 #endif
 }
 
@@ -370,23 +378,31 @@ int glhUnProjectf(	float winx, float winy, float winz,
 
 RenderState renderState = { false, 0, 0.0f, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, false, 0.1f, GL_SMOOTH, false, {1.0f, 1.0f, 1.0f, 1.0f} };
 
-static void applyShaderUniforms() {
+static void applyShaderUniforms(bool useVertexColor) {
     if (!currentShader) return;
     currentShader->setUniformMatrix4("u_modelView", currentStack->getTop().m);
     currentShader->setUniformMatrix4("u_projection", projectionStack.getTop().m);
     currentShader->setUniform1i("u_useTexture", renderState.texture2DEnabled ? 1 : 0);
     currentShader->setUniform1i("u_alphaTest", renderState.alphaTestEnabled ? 1 : 0);
-    currentShader->setUniform4f("u_color", renderState.color[0], renderState.color[1], renderState.color[2], renderState.color[3]);
+    currentShader->setUniform1f("u_alphaRef", renderState.alphaTestRef);
+    // 启用逐顶点颜色时，单片统一色必须为白，否则颜色会被乘两次（发暗/偏色）
+    if (useVertexColor) {
+        currentShader->setUniform4f("u_color", 1.0f, 1.0f, 1.0f, 1.0f);
+    } else {
+        currentShader->setUniform4f("u_color", renderState.color[0], renderState.color[1],
+                                    renderState.color[2], renderState.color[3]);
+    }
     currentShader->setUniform1i("u_texture", 0);
 }
 
 #ifdef USE_VBO
 void drawArrayVT(int bufferId, int vertices, int vertexSize /* = 36 */, unsigned int mode /* = GL_TRIANGLES */) {
     ensureShaders();
-    applyShaderUniforms();
+    applyShaderUniforms(false);
     glBindBuffer(GL_ARRAY_BUFFER, bufferId);
     GLint posLoc = currentShader ? currentShader->getAttribLocation("a_position") : 0;
     GLint texLoc = currentShader ? currentShader->getAttribLocation("a_texCoord") : 1;
+    GLint colLoc = currentShader ? currentShader->getAttribLocation("a_color") : 2;
     if (posLoc != -1) {
         glEnableVertexAttribArray(posLoc);
         glVertexAttribPointer(posLoc, 3, GL_FLOAT, GL_FALSE, vertexSize, 0);
@@ -395,6 +411,12 @@ void drawArrayVT(int bufferId, int vertices, int vertexSize /* = 36 */, unsigned
         glEnableVertexAttribArray(texLoc);
         glVertexAttribPointer(texLoc, 2, GL_FLOAT, GL_FALSE, vertexSize, (GLvoid*)(3 * 4));
     }
+    // VT 布局没有逐顶点颜色。不关掉数组并给个常量白，v_color 会沿用上一次
+    // glVertexAttrib4f 的值（默认 0,0,0,0）→ 天空/星空/虚空被乘成纯黑。
+    if (colLoc != -1) {
+        glDisableVertexAttribArray(colLoc);
+        glVertexAttrib4f(colLoc, 1.0f, 1.0f, 1.0f, 1.0f);
+    }
     glDrawArrays(mode, 0, vertices);
     if (posLoc != -1) glDisableVertexAttribArray(posLoc);
     if (texLoc != -1) glDisableVertexAttribArray(texLoc);
@@ -402,7 +424,7 @@ void drawArrayVT(int bufferId, int vertices, int vertexSize /* = 36 */, unsigned
 
 void drawArrayVTC(int bufferId, int vertices, int vertexSize /* = 36 */) {
     ensureShaders();
-    applyShaderUniforms();
+    applyShaderUniforms(true);
     glBindBuffer(GL_ARRAY_BUFFER, bufferId);
     GLint posLoc = currentShader ? currentShader->getAttribLocation("a_position") : 0;
     GLint texLoc = currentShader ? currentShader->getAttribLocation("a_texCoord") : 1;
@@ -427,7 +449,7 @@ void drawArrayVTC(int bufferId, int vertices, int vertexSize /* = 36 */) {
 
 void drawArrayVTN(int bufferId, int vertices, int vertexSize /* = 36 */) {
     ensureShaders();
-    applyShaderUniforms();
+    applyShaderUniforms(true);
     glBindBuffer(GL_ARRAY_BUFFER, bufferId);
     GLint posLoc = currentShader ? currentShader->getAttribLocation("a_position") : 0;
     GLint texLoc = currentShader ? currentShader->getAttribLocation("a_texCoord") : 1;
@@ -601,7 +623,7 @@ void mc_glViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
 
 void mc_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
     ensureShaders();
-    applyShaderUniforms();
+    applyShaderUniforms(cEnabled);
 
     if (currentShader) {
         GLint posLoc = currentShader->getAttribLocation("a_position");

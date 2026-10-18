@@ -30,6 +30,7 @@ uniform sampler2D u_texture;
 uniform vec4 u_color;
 uniform bool u_useTexture;
 uniform bool u_alphaTest;
+uniform float u_alphaRef;
 
 void main() {
     vec4 texColor = vec4(1.0);
@@ -37,20 +38,12 @@ void main() {
         texColor = texture2D(u_texture, v_texCoord);
     }
 
-    vec4 finalColor;
+    // GLES1 语义：启用颜色数组时，逐顶点颜色取代 glColor；
+    // 未启用时，使用当前颜色。二者只能生效一个，不能相乘两次
+    // （由 CPU 侧在启用颜色数组时把 u_color 置为白色来保证）。
+    vec4 finalColor = texColor * v_color * u_color;
 
-    if (u_useTexture) {
-        float colorDiff = abs(u_color.r - 1.0) + abs(u_color.g - 1.0) + abs(u_color.b - 1.0);
-        if (colorDiff < 0.15) {
-            finalColor = texColor * v_color;
-        } else {
-            finalColor = texColor * v_color * u_color;
-        }
-    } else {
-        finalColor = v_color * u_color;
-    }
-
-    if (u_alphaTest && finalColor.a < 0.1) {
+    if (u_alphaTest && finalColor.a < u_alphaRef) {
         discard;
     }
 

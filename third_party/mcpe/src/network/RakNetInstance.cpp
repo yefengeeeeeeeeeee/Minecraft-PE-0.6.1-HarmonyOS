@@ -114,7 +114,17 @@ void RakNetInstance::pingForHosts(int basePort)
 	if (!rakPeer->IsActive())
 	{
 		RakNet::SocketDescriptor socket(0, 0);
-		rakPeer->Startup(4, &socket, 1);
+		socket.socketFamily = AF_INET;
+		RakNet::StartupResult result = rakPeer->Startup(4, &socket, 1);
+		if (result != RakNet::RAKNET_STARTED)
+		{
+			// [OHOS] 没有 INTERNET 权限等原因导致 Startup 失败时，
+			// socketList 会为空，Ping() 会越界解引用崩溃。
+			// 这里直接放弃广播，服务列表保持为空而不崩溃。
+			LOGI("pingForHosts: RakNet Startup failed, result=%{public}d", (int)result);
+			isPingingForServers = false;
+			return;
+		}
 	}
 
 	isPingingForServers = true;

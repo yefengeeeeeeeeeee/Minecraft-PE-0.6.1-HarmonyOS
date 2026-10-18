@@ -84,17 +84,21 @@ public:
         m[8] *= z; m[9] *= z; m[10] *= z; m[11] *= z;
     }
 
+    // 列主序（column-major）矩阵乘法：this = this * o，与 glMultMatrixf 语义一致。
+    // 旧实现按行主序计算却存在列主序数组里，实际效果是 pre-multiply
+    // （this = o * this）。所有“先 glTranslatef 再 glRotatef”的地方变换顺序都会反转，
+    // 典型症状：手持物跑到屏幕中间、牌子/实体位置错乱、视角转动时世界漂移。
     void multiply(const Matrix4& o) {
-        Matrix4 res;
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                res.m[i * 4 + j] = m[i * 4 + 0] * o.m[0 * 4 + j] +
-                                   m[i * 4 + 1] * o.m[1 * 4 + j] +
-                                   m[i * 4 + 2] * o.m[2 * 4 + j] +
-                                   m[i * 4 + 3] * o.m[3 * 4 + j];
+        float res[16];
+        for (int c = 0; c < 4; c++) {
+            for (int r = 0; r < 4; r++) {
+                res[c * 4 + r] = m[0 * 4 + r] * o.m[c * 4 + 0] +
+                                 m[1 * 4 + r] * o.m[c * 4 + 1] +
+                                 m[2 * 4 + r] * o.m[c * 4 + 2] +
+                                 m[3 * 4 + r] * o.m[c * 4 + 3];
             }
         }
-        for (int i = 0; i < 16; i++) m[i] = res.m[i];
+        for (int i = 0; i < 16; i++) m[i] = res[i];
     }
 
     void ortho(float left, float right, float bottom, float top, float zNear, float zFar) {

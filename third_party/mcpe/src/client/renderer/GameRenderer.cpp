@@ -3,6 +3,7 @@
 #include "gles.h"
 #include "Lighting.h"
 #include "../../util/PerfTimer.h"
+#include "../../platform/log.h"
 
 #include "LevelRenderer.h"
 #include "ItemInHandRenderer.h"
@@ -278,6 +279,25 @@ void GameRenderer::renderLevel(float a) {
 		TIMER_POP_PUSH("camera");
 		setupCamera(a, i);
 		saveMatrices();
+
+		// ==== 临时探针：视口 / 相机 / 投影矩阵 ====
+		{
+			static int s_probe = 0;
+			if ((s_probe++ % 120) == 0) {
+				GLfloat pm[16], mm[16];
+				glGetFloatv(GL_PROJECTION_MATRIX, pm);
+				glGetFloatv(GL_MODELVIEW_MATRIX, mm);
+				GLint vp[4] = {0,0,0,0};
+				glGetIntegerv(GL_VIEWPORT, vp);
+				LOGI("PROBE view %{public}dx%{public}d vp=(%{public}d,%{public}d,%{public}d,%{public}d) cam=(%{public}.2f,%{public}.2f,%{public}.2f) yaw=%{public}.1f pitch=%{public}.1f",
+				     mc->width, mc->height, vp[0], vp[1], vp[2], vp[3],
+				     xOff, yOff, zOff, cameraEntity->yRot, cameraEntity->xRot);
+				LOGI("PROBE P=[%{public}.3f %{public}.3f %{public}.3f %{public}.3f | %{public}.3f %{public}.3f %{public}.3f %{public}.3f]",
+				     pm[0], pm[5], pm[10], pm[11], pm[14], pm[15], pm[2], pm[6]);
+				LOGI("PROBE M=[%{public}.2f %{public}.2f %{public}.2f %{public}.2f | %{public}.2f %{public}.2f %{public}.2f %{public}.2f]",
+				     mm[0], mm[4], mm[8], mm[12], mm[1], mm[5], mm[9], mm[13]);
+			}
+		}
 
 		if (useScreenScissor) {
 			glEnable2(GL_SCISSOR_TEST);

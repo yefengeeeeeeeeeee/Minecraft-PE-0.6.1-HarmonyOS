@@ -40,6 +40,12 @@
     "requestPermissions": [
       {
         "name": "ohos.permission.INPUT_MONITORING"
+      },
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO"
       }
     ]
   }

@@ -643,6 +643,20 @@ int LevelRenderer::renderChunks( int from, int to, int layer, float alpha )
 	float yOff = player->yOld + (player->y - player->yOld) * alpha;
 	float zOff = player->zOld + (player->z - player->zOld) * alpha;
 
+	// ==== 临时探针：确认 chunk 几何与位置是否正确 ====
+	{
+		static int s_probe = 0;
+		if ((s_probe++ % 120) == 0) {
+			LOGI("PROBE layer=%{public}d count=%{public}d size=%{public}d cam=(%{public}.2f,%{public}.2f,%{public}.2f)",
+			     layer, count, (int)_renderChunks.size(), xOff, yOff, zOff);
+			for (unsigned int i = 0; i < _renderChunks.size() && i < 3; ++i) {
+				RenderChunk& rc = _renderChunks[i]->getRenderChunk(layer);
+				LOGI("PROBE rc[%{public}d] pos=(%{public}.1f,%{public}.1f,%{public}.1f) verts=%{public}d vbo=%{public}d",
+				     (int)i, rc.pos.x, rc.pos.y, rc.pos.z, rc.vertexCount, (int)rc.vboId);
+			}
+		}
+	}
+
 	//int lists = 0;
 	renderList.clear();
 	renderList.init(xOff, yOff, zOff);
@@ -1039,6 +1053,17 @@ void LevelRenderer::renderEntities(Vec3 cam, Culler* culler, float a) {
 			std::sort(&toRender[0], &toRender[renderedEntities], entityRenderPredicate);
 			for (int i = 0; i < renderedEntities; ++i) {
 				EntityRenderDispatcher* disp = EntityRenderDispatcher::getInstance();
+				if (i < 8) {
+					static int s_ep = 0;
+					if ((s_ep % 240) == 0) {
+						Entity* e = toRender[i];
+						LOGI("PROBE ent[%{public}d] rId=%{public}d pos=(%{public}.2f,%{public}.2f,%{public}.2f) rel=(%{public}.2f,%{public}.2f,%{public}.2f) cam=(%{public}.2f,%{public}.2f,%{public}.2f)",
+						     i, (int)e->entityRendererId, e->x, e->y, e->z,
+						     e->x - EntityRenderDispatcher::xOff, e->y - EntityRenderDispatcher::yOff, e->z - EntityRenderDispatcher::zOff,
+						     EntityRenderDispatcher::xOff, EntityRenderDispatcher::yOff, EntityRenderDispatcher::zOff);
+					}
+					if (i == 7) s_ep++;
+				}
 				disp->render(toRender[i], a);
 			}
 		}

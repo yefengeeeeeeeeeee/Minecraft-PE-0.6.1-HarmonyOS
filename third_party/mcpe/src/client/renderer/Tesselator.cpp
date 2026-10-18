@@ -416,7 +416,15 @@ void Tesselator::draw()
 			currentShader->setUniformMatrix4("u_projection", projectionStack.getTop().m);
 			currentShader->setUniform1i("u_useTexture", hasTexture ? 1 : 0);
 			currentShader->setUniform1i("u_alphaTest", renderState.alphaTestEnabled ? 1 : 0);
-			currentShader->setUniform4f("u_color", renderState.color[0], renderState.color[1], renderState.color[2], renderState.color[3]);
+			currentShader->setUniform1f("u_alphaRef", renderState.alphaTestRef);
+			// 有逐顶点颜色时统一色必须为白：GLES1 语义里颜色数组会取代 glColor，
+			// 两者相乘两次会造成整体发暗/偏色。
+			if (hasColor) {
+				currentShader->setUniform4f("u_color", 1.0f, 1.0f, 1.0f, 1.0f);
+			} else {
+				currentShader->setUniform4f("u_color", renderState.color[0], renderState.color[1],
+					renderState.color[2], renderState.color[3]);
+			}
 			currentShader->setUniform1i("u_texture", 0);
 		}
 
@@ -431,6 +439,10 @@ void Tesselator::draw()
 		if (hasTexture && texLoc != -1) {
 			glEnableVertexAttribArray(texLoc);
 			glVertexAttribPointer(texLoc, 2, GL_FLOAT, GL_FALSE, VertexSizeBytes, (GLvoid*)(3 * 4));
+		} else if (texLoc != -1) {
+			// 上一次带贴图的绘制会把这个属性留在启用状态，不关掉会采样到上一批的 UV
+			glDisableVertexAttribArray(texLoc);
+			glVertexAttrib2f(texLoc, 0.0f, 0.0f);
 		}
 		if (colLoc != -1) {
 			glEnableVertexAttribArray(colLoc);
@@ -444,8 +456,10 @@ void Tesselator::draw()
 		}
 
 		if (posLoc != -1) glDisableVertexAttribArray(posLoc);
-		if (hasTexture && texLoc != -1) glDisableVertexAttribArray(texLoc);
+		if (texLoc != -1) glDisableVertexAttribArray(texLoc);
 		if (colLoc != -1) glDisableVertexAttribArray(colLoc);
+		// 解绑，避免后续走客户端数组的绘制被当成「VBO 内偏移」
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
 	clear();

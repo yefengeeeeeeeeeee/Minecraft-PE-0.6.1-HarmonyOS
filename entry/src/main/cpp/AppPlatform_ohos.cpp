@@ -184,16 +184,37 @@ TextureData AppPlatform_ohos::decodePng(const unsigned char* data, size_t size)
         return out;
     }
 
-    size_t dataBytes = (size_t)info.rowSize * info.height;
-    unsigned char* pixels = new unsigned char[dataBytes];
-    memcpy(pixels, addr, dataBytes);
+    const int32_t texW = (int32_t)info.width;
+    const int32_t texH = (int32_t)info.height;
+    const size_t srcRow = (size_t)info.rowSize;   // 解码器给出的行跨距，可能带填充
+    const size_t tightRow = (size_t)texW * 4;     // RGBA8888 紧凑行宽
+
+    if (texW <= 0 || texH <= 0 || srcRow < tightRow) {
+        LOGE("decodePng bad pixel map %{public}dx%{public}d row=%{public}zu", texW, texH, srcRow);
+        OH_PixelMap_UnAccessPixels(pixelMap);
+        OH_ImageSource_Release(native);
+        return out;
+    }
+
+    // 关键：glTexImage2D 默认按 width*4 逐行取数据，若行跨距带填充，
+    // 直接整块 memcpy 会让每一行向右错位，表现为整张图斜向拉丝/花屏。
+    unsigned char* pixels = new unsigned char[tightRow * (size_t)texH];
+    if (srcRow == tightRow) {
+        memcpy(pixels, addr, tightRow * (size_t)texH);
+    } else {
+        const unsigned char* src = (const unsigned char*)addr;
+        for (int32_t row = 0; row < texH; ++row) {
+            memcpy(pixels + tightRow * (size_t)row, src + srcRow * (size_t)row, tightRow);
+        }
+        LOGI("decodePng repack %{public}dx%{public}d row %{public}zu->%{public}zu", texW, texH, srcRow, tightRow);
+    }
 
     OH_PixelMap_UnAccessPixels(pixelMap);
     OH_ImageSource_Release(native);
 
-    out.w = (int)info.width;
-    out.h = (int)info.height;
-    out.numBytes = (int)dataBytes;
+    out.w = texW;
+    out.h = texH;
+    out.numBytes = (int)(tightRow * (size_t)texH);
     out.data = pixels;
     out.transparent = true;
     out.memoryHandledExternally = false;
