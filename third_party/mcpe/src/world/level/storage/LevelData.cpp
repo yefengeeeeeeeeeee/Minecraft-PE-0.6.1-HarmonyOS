@@ -13,7 +13,7 @@ LevelData::LevelData()
 	playerDataVersion(-1),
 	storageVersion(0),
 	gameType(GameType::Default),	spawnMobs(false),
-	allowCheats(false),	loadedPlayerTag(NULL)
+	loadedPlayerTag(NULL)
 {
 	//LOGI("ctor 1: %p\n", this);
 	spawnMobs = (gameType == GameType::Survival);
@@ -21,7 +21,7 @@ LevelData::LevelData()
 
 LevelData::LevelData( const LevelSettings& settings, const std::string& levelName, int generatorVersion /*= -1*/ )
 :	seed(settings.getSeed()),
-	gameType(settings.getGameType()),	allowCheats(settings.getAllowCheats()),	levelName(levelName),
+	gameType(settings.getGameType()),	levelName(levelName),
 	xSpawn(128),
 	ySpawn(64),
 	zSpawn(128),
@@ -61,7 +61,6 @@ LevelData::LevelData( const LevelData& rhs )
 	playerDataVersion(rhs.playerDataVersion),
 	generatorVersion(rhs.generatorVersion),
 	spawnMobs(rhs.spawnMobs),
-	allowCheats(rhs.allowCheats),
 	loadedPlayerTag(NULL),
 	playerData(rhs.playerData)
 {
@@ -84,7 +83,6 @@ LevelData& LevelData::operator=( const LevelData& rhs )
 		time		= rhs.time;
 		dimension	= rhs.dimension;
 		spawnMobs	= rhs.spawnMobs;
-		allowCheats	= rhs.allowCheats;
 		playerData  = rhs.playerData;
 		playerDataVersion	= rhs.playerDataVersion;
 		generatorVersion	= rhs.generatorVersion;
@@ -162,7 +160,6 @@ void LevelData::setTagData( CompoundTag* tag, CompoundTag* playerTag )
 	if (!tag) return;
 	tag->putLong("RandomSeed", seed);
 	tag->putInt("GameType", gameType);
-	tag->putBoolean("AllowCommands", allowCheats);
 	tag->putInt("SpawnX", xSpawn);
 	tag->putInt("SpawnY", ySpawn);
 	tag->putInt("SpawnZ", zSpawn);
@@ -188,7 +185,6 @@ void LevelData::getTagData( const CompoundTag* tag )
 	if (!tag) return;
 	seed = (long)tag->getLong("RandomSeed");
 	gameType = tag->getInt("GameType");
-	allowCheats = tag->getBoolean("AllowCommands");
 	xSpawn = tag->getInt("SpawnX");
 	ySpawn = tag->getInt("SpawnY");
 	zSpawn = tag->getInt("SpawnZ");
@@ -375,12 +371,3 @@ void LevelData::setSpawnMobs( bool doSpawn )
 	spawnMobs = doSpawn;
 }
 
-bool LevelData::getAllowCheats() const
-{
-	return allowCheats;
-}
-
-void LevelData::setAllowCheats( bool allow )
-{
-	allowCheats = allow;
-}

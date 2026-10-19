@@ -49,6 +49,7 @@ target_link_libraries(minecraftpe PUBLIC
     libohinput.so
     libace_napi.z.so
     libhilog_ndk.z.so
+    libnet_connection.so
     libEGL.so
     libGLESv3.so
     libnative_window.so

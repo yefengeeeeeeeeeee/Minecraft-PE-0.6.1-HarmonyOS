@@ -99,6 +99,9 @@ void MobRenderer::render(Entity* e, float x, float y, float z, float rot, float 
 		if (renderHurt) {
 			glEnable(GL_COLOR_MATERIAL);
 			glColor4f2(br, 0, 0, 0.4f);
+			// 模型的 VBO 顶点色是白的，默认绘制会把 u_color 强制成白色，
+			// 于是这里的红光完全看不见。打开强制统一色，让受击染红真正生效。
+			mc_glForceUniformColor(true);
 			model->render(e, wp, ws, bob, headRot - bodyRot, headRotx, ascale);
 			for (int i = 0; i < MAX_ARMOR_LAYERS; i++) {
 				if (prepareArmor(mob, i, a) < 0) continue;
@@ -107,6 +110,7 @@ void MobRenderer::render(Entity* e, float x, float y, float z, float rot, float 
 				armor->prepareMobModel(mob, wp, ws, a);
 				armor->render(e, wp, ws, bob, headRot - bodyRot, headRotx, ascale);
 			}
+			mc_glForceUniformColor(false);
 		}
 
 		if (renderOverlay) {
@@ -115,6 +119,7 @@ void MobRenderer::render(Entity* e, float x, float y, float z, float rot, float 
 			float b = ((overlayColor) & 0xff) / 255.0f;
 			float aa = ((overlayColor >> 24) & 0xff) / 255.0f;
 			glColor4f2(r, g, b, aa);
+			mc_glForceUniformColor(true);
 			model->render(e, wp, ws, bob, headRot - bodyRot, headRotx, ascale);
 			for (int i = 0; i < MAX_ARMOR_LAYERS; i++) {
 				if (prepareArmor(mob, i, a) < 0) continue;
@@ -123,6 +128,7 @@ void MobRenderer::render(Entity* e, float x, float y, float z, float rot, float 
 				armor->prepareMobModel(mob, wp, ws, a);
 				armor->render(e, wp, ws, bob, headRot - bodyRot, headRotx, ascale);
 			}
+			mc_glForceUniformColor(false);
 		}
 
 		glDepthFunc(GL_LEQUAL);

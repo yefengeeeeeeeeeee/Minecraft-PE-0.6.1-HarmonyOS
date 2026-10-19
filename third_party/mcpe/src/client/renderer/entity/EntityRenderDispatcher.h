@@ -45,6 +45,11 @@ public:
     Font* getFont();
 
 	void onGraphicsReset();
+
+	// Keeps PlayerRenderer's skeleton in sync with the skin format of the
+	// given entity (64x32 legacy vs 64x64 modern). Needed for the first-person
+	// hand, which is rendered without calling PlayerRenderer::render().
+	void setModernSkin(Entity* player);
 private:
 	void assign(EntityRendererId id, EntityRenderer* renderer);
 public:

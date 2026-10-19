@@ -12,13 +12,11 @@
 SimpleChooseLevelScreen::SimpleChooseLevelScreen(const std::string& levelName)
 :   bHeader(0),
     bGamemode(0),
-    bCheats(0),
     bBack(0),
     bCreate(0),
     levelName(levelName),
     hasChosen(false),
     gamemode(GameType::Survival),
-    cheatsEnabled(false),
     tLevelName(0, "World name"),
     tSeed(1, "World seed")
 {
@@ -28,7 +26,6 @@ SimpleChooseLevelScreen::~SimpleChooseLevelScreen()
 {
     if (bHeader) delete bHeader;
     delete bGamemode;
-    delete bCheats;
     delete bBack;
     delete bCreate;
 }
@@ -58,22 +55,18 @@ void SimpleChooseLevelScreen::init()
     }
     if (/* minecraft->useTouchscreen() */ true) {
         bGamemode = new Touch::TButton(1, "Survival mode");
-        bCheats  = new Touch::TButton(4, "Cheats: Off");
         bCreate  = new Touch::TButton(3, "Create");
     } else {
         bGamemode = new Button(1, "Survival mode");
-        bCheats  = new Button(4, "Cheats: Off");
         bCreate  = new Button(3, "Create");
     }
 
     buttons.push_back(bHeader);
     buttons.push_back(bBack);
     buttons.push_back(bGamemode);
-    buttons.push_back(bCheats);
     buttons.push_back(bCreate);
 
     tabButtons.push_back(bGamemode);
-    tabButtons.push_back(bCheats);
     tabButtons.push_back(bBack);
     tabButtons.push_back(bCreate);
 
@@ -109,14 +102,10 @@ void SimpleChooseLevelScreen::setupPositions()
     tSeed.y = tLevelName.y + 30;
 
     const int buttonWidth = 120;
-    const int buttonSpacing = 10;
-    const int totalButtonWidth = buttonWidth * 2 + buttonSpacing;
 
+    // 只剩「游戏模式」一个按钮，居中对齐
     bGamemode->width = buttonWidth;
-    bCheats->width = buttonWidth;
-
-    bGamemode->x = centerX - totalButtonWidth / 2;
-    bCheats->x = bGamemode->x + buttonWidth + buttonSpacing;
+    bGamemode->x = centerX - buttonWidth / 2;
 
     // compute vertical centre for buttons in remaining space
     {
@@ -127,7 +116,6 @@ void SimpleChooseLevelScreen::setupPositions()
         if (availHeight < 0) availHeight = 0;
         int y = availTop + (availHeight - bGamemode->height) / 2;
         bGamemode->y = y;
-        bCheats->y = y;
     }
 
     bCreate->width = 100;
@@ -212,12 +200,6 @@ void SimpleChooseLevelScreen::buttonClicked( Button* button )
         return;
     }
 
-    if (button == bCheats) {
-        cheatsEnabled = !cheatsEnabled;
-        bCheats->msg = cheatsEnabled ? "Cheats: On" : "Cheats: Off";
-        return;
-    }
-
     if (button == bCreate && !tLevelName.text.empty()) {
         int seed = getEpochTimeS();
         if (!tSeed.text.empty()) {
@@ -230,7 +212,7 @@ void SimpleChooseLevelScreen::buttonClicked( Button* button )
             }
         }
         std::string levelId = getUniqueLevelName(tLevelName.text);
-        LevelSettings settings(seed, gamemode, cheatsEnabled);
+        LevelSettings settings(seed, gamemode);
         minecraft->selectLevel(levelId, levelId, settings);
         minecraft->hostMultiplayer();
         minecraft->setScreen(new ProgressScreen());

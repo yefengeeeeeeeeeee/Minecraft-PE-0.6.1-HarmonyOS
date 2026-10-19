@@ -137,6 +137,24 @@ void EntityRenderDispatcher::render( Entity* entity, float x, float y, float z, 
 	}
 }
 
+void EntityRenderDispatcher::setModernSkin(Entity* player) {
+	if (player == NULL)
+		return;
+
+	// Only the player renderer has the dual skeleton; never downcast blindly.
+	EntityRendererId rendererId = player->entityRendererId;
+	if (rendererId == ER_QUERY_RENDERER)
+		rendererId = player->queryEntityRenderer();
+	if (rendererId != ER_PLAYER_RENDERER)
+		return;
+
+	EntityRenderer* renderer = getRenderer(rendererId);
+	if (renderer == NULL)
+		return;
+
+	((PlayerRenderer*)renderer)->setModernSkin((Mob*)player);
+}
+
 EntityRenderer* EntityRenderDispatcher::getRenderer( Entity* entity )
 {
 	EntityRendererId rendererId = entity->entityRendererId;

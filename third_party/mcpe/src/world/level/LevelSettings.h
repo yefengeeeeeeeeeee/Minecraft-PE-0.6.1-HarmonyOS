@@ -14,14 +14,13 @@ namespace GameType {
 class LevelSettings
 {
 public:
-    LevelSettings(long seed, int gameType, bool allowCheats = false)
+    LevelSettings(long seed, int gameType)
     :   seed(seed),
-        gameType(gameType),
-        allowCheats(allowCheats)
+        gameType(gameType)
     {
     }
 	static LevelSettings None() {
-		return LevelSettings(-1,-1,false);
+		return LevelSettings(-1,-1);
 	}
 
     long getSeed() const {
@@ -30,10 +29,6 @@ public:
 
     int getGameType() const {
         return gameType;
-    }
-
-    bool getAllowCheats() const {
-        return allowCheats;
     }
 
 	//
@@ -58,7 +53,6 @@ public:
 private:
     const long seed;
     const int gameType;
-    const bool allowCheats;
 };
 
 #endif /*NET_MINECRAFT_WORLD_LEVEL__LevelSettings_H__*/

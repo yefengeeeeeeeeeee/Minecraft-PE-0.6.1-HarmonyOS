@@ -18,6 +18,17 @@ namespace ohos_soft_keyboard {
     bool isRequested();
 }
 
+// 打开外部链接（CreditsScreen 里的超链接等）。
+//
+// openURL() 是在**渲染线程**里被调用的（CreditsScreen::mouseClicked 走的是
+// 引擎的 UI 事件链路，不在 JS 线程），而 napi_* 只能在 JS 线程上跑，
+// 直接在这里调 NAPI 会崩。所以这里沿用软键盘那套「存标志 + ArkTS 轮询」的做法：
+// 只把 URL 放进一个带锁的待处理槽，ArkTS 每帧 consumeOpenUrl() 取走再真正拉起浏览器。
+namespace ohos_open_url {
+    void request(const std::string& url);
+    std::string take();
+}
+
 class AppPlatform_ohos : public AppPlatform
 {
     typedef AppPlatform super;
@@ -42,7 +53,7 @@ public:
     virtual void vibrate(int milliSeconds) override {}
     virtual void showDialog(int dialogId) override {}
     virtual void createUserInput() override {}
-    virtual void openURL(const std::string& url) override {}
+    virtual void openURL(const std::string& url) override;
     virtual void finish() override {}
 
     // 输入法（软键盘）

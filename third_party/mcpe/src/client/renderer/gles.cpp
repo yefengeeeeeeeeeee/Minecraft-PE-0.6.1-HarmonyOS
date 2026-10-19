@@ -378,6 +378,12 @@ int glhUnProjectf(	float winx, float winy, float winz,
 
 RenderState renderState = { false, 0, 0.0f, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, false, 0.1f, GL_SMOOTH, false, {1.0f, 1.0f, 1.0f, 1.0f} };
 
+// 见 gles.h：模型 VBO 的顶点色恒为白色，需要一层机制让 glColor 在画模型时仍然生效
+static bool gForceUniformColor = false;
+void mc_glForceUniformColor(bool on) {
+    gForceUniformColor = on;
+}
+
 static void applyShaderUniforms(bool useVertexColor) {
     if (!currentShader) return;
     currentShader->setUniformMatrix4("u_modelView", currentStack->getTop().m);
@@ -456,7 +462,8 @@ void drawArrayVTC(int bufferId, int vertices, int vertexSize /* = 36 */) {
 
 void drawArrayVTN(int bufferId, int vertices, int vertexSize /* = 36 */) {
     ensureShaders();
-    applyShaderUniforms(true);
+    // 顶点色是白的；需要覆盖色时改走 u_color，否则 glColor 会被 applyShaderUniforms 抹掉
+    applyShaderUniforms(!gForceUniformColor);
     glBindBuffer(GL_ARRAY_BUFFER, bufferId);
     GLint posLoc = currentShader ? currentShader->getAttribLocation("a_position") : 0;
     GLint texLoc = currentShader ? currentShader->getAttribLocation("a_texCoord") : 1;

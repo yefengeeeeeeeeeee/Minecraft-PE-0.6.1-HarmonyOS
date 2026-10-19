@@ -42,6 +42,17 @@ SocketLayerOverride *SocketLayer::slo=0;
 
 #endif
 
+#if defined(OHOS)
+// OpenHarmony 的应用进程跑在沙箱里，libc 的 gethostbyname()/getaddrinfo()
+// 直接走 /etc/resolv.conf + 自建 DNS 查询，在沙箱内经常拿不到结果（返回 NULL），
+// 表现就是"填域名连不上、填 IP 能连上"。系统为此提供了走 netd 的
+// OH_NetConn_GetAddrInfo()（libnet_connection.so），这里优先用它。
+#include <network/netmanager/net_connection.h>
+#include <hilog/log.h>
+#define MCPE_NET_DOMAIN 0
+#define MCPE_NET_TAG "MCPE-NET"
+#endif
+
 
 
 
@@ -834,11 +845,44 @@ const char* SocketLayer::DomainNameToIP_Old( const char *domainName )
 
 
 
+#if defined(OHOS)
+	// 走 netd 解析（需要 ohos.permission.INTERNET），netId 传 0 表示默认网络。
+	// 成功就直接返回，失败再退回下面的 gethostbyname()。
+	{
+		struct addrinfo hints;
+		struct addrinfo* dnsResult = 0;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;        // RakNet 这里只处理 IPv4
+		hints.ai_socktype = SOCK_DGRAM;
+
+		int32_t rc = OH_NetConn_GetAddrInfo((char*)domainName, NULL, &hints, &dnsResult, 0);
+		if (rc == 0 && dnsResult != 0 && dnsResult->ai_addr != 0) {
+			static char dnsIp[INET_ADDRSTRLEN];
+			struct sockaddr_in* sa = (struct sockaddr_in*)dnsResult->ai_addr;
+			inet_ntop(AF_INET, &sa->sin_addr, dnsIp, sizeof(dnsIp));
+			OH_LOG_Print(LOG_APP, LOG_INFO, MCPE_NET_DOMAIN, MCPE_NET_TAG,
+				"DNS %{public}s -> %{public}s (netd)", domainName, dnsIp);
+			OH_NetConn_FreeDnsResult(dnsResult);
+			return dnsIp;
+		}
+		OH_LOG_Print(LOG_APP, LOG_WARN, MCPE_NET_DOMAIN, MCPE_NET_TAG,
+			"DNS %{public}s failed via netd rc=%{public}d, fallback to gethostbyname",
+			domainName, rc);
+		if (dnsResult != 0) {
+			OH_NetConn_FreeDnsResult(dnsResult);
+		}
+	}
+#endif
+
 	// Use inet_addr instead? What is the difference?
 	struct hostent * phe = gethostbyname( domainName );
 
 	if ( phe == 0 || phe->h_addr_list[ 0 ] == 0 )
 	{
+#if defined(OHOS)
+		OH_LOG_Print(LOG_APP, LOG_ERROR, MCPE_NET_DOMAIN, MCPE_NET_TAG,
+			"DNS %{public}s failed via gethostbyname", domainName);
+#endif
 		//cerr << "Yow! Bad host lookup." << endl;
 		return 0;
 	}

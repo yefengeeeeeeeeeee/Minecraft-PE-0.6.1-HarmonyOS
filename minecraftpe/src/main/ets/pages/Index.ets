@@ -1,5 +1,6 @@
 import testNapi from 'libminecraftpe.so';
-import { common } from '@kit.AbilityKit';
+import { common, Want } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const LOG_DOMAIN: number = 0x0001;
@@ -181,6 +182,8 @@ struct Index {
         // 渲染循环顺便轮询「引擎要不要键盘」，开销极小，
         // 也免去让 C++ 反向回调 ArkTS（那需要 threadsafe function，复杂且易踩线程坑）。
         this.syncSoftKeyboard();
+        // 引擎点了超链接（Credits 界面）→ 真正拉起浏览器
+        this.syncOpenUrl();
         // 按住状态自愈 + 帧率统计
         this.syncHeldKeys();
         this.tickFps();
@@ -231,6 +234,46 @@ struct Index {
     setTimeout(() => {
       if (!this.keyboardShown) this.requestFocus();
     }, 320);
+  }
+
+  // ---------- 外部链接（AppPlatform::openURL 的实现端） ----------
+  //
+  // C++ 侧 openURL() 在渲染线程被调用，不能在那边直接调 NAPI，
+  // 于是它只把 URL 塞进一个待处理槽；这里每帧取一次，取到就交给系统打开。
+  // 开销只在「真的有链接」时才发生，其余帧就是一次返回空串的 NAPI 调用。
+
+  private syncOpenUrl(): void {
+    let url: string = '';
+    try {
+      url = testNapi.consumeOpenUrl();
+    } catch (e) {
+      return;
+    }
+    if (url === '') {
+      return;
+    }
+    this.openExternal(url);
+  }
+
+  private openExternal(url: string): void {
+    const ctx = getContext(this) as common.UIAbilityContext;
+    // 首选 openLink：它按 App Linking / 浏览器选择器的规则挑应用，
+    // 也是官方推荐的「打开网页」入口（scheme 需在 module.json5 的 querySchemes 里声明）。
+    ctx.openLink(url).catch((err: BusinessError) => {
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'openLink failed url=%{public}s code=%{public}d msg=%{public}s',
+                  url, err.code, err.message);
+      // 退路：用隐式 want 交给系统找能处理 VIEW + browsable 的应用。
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      };
+      ctx.startAbility(want).catch((e2: BusinessError) => {
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'startAbility(viewData) failed code=%{public}d msg=%{public}s',
+                    e2.code, e2.message);
+        this.status = 'open url failed: ' + e2.code;
+      });
+    });
   }
 
   private syncSoftKeyboard(): void {

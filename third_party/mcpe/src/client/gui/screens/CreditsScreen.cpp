@@ -31,9 +31,9 @@ void CreditsScreen::init() {
     // TODO: rewrite it
     // prepare text lines
     _lines.clear();
-    _lines.push_back("Minecraft: Pocket Edition");
+    _lines.push_back("Minecraft - Pocket Edition");
     _lines.push_back("");
-    _lines.push_back("Programmers:");
+    _lines.push_back("Programmers :");
     _lines.push_back("mschiller890");
     _lines.push_back("rootrd");
     _lines.push_back("Cdlinuxit43");
@@ -43,7 +43,7 @@ void CreditsScreen::init() {
 	_lines.push_back("fileshredder");
     _lines.push_back("");
     // avoid color tags around the URL so it isn't mangled by the parser please
-    _lines.push_back("Authors Link:");
+    _lines.push_back("Authors Link :");
     _lines.push_back("https://space.bilibili.com/284615092");
     _lines.push_back("https://space.bilibili.com/663115435");
     _lines.push_back("https://space.bilibili.com/1624428827");

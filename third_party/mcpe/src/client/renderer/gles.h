@@ -205,6 +205,12 @@ void mc_glOrthof(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLflo
 
 void mc_glColor4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
 void mc_glColor3f(GLfloat r, GLfloat g, GLfloat b);
+
+// 模型/实体的 VBO 里逐顶点颜色恒为白色，绘制时又会把着色器统一色强制成白色
+// （GLES1 语义：颜色数组生效时 glColor 不应再相乘）。结果就是「先 glColor 再画模型」
+// 这类覆盖层（受击染红、苦力怕闪白）完全没有颜色。
+// 打开这个开关后，VTN 绘制改用 renderState.color，配合全白的顶点色正好得到纯色覆盖层。
+void mc_glForceUniformColor(bool on);
 void mc_glEnableClientState(GLenum array);
 void mc_glDisableClientState(GLenum array);
 void mc_glVertexPointer(GLint size, GLenum type, GLsizei stride, const GLvoid *pointer);

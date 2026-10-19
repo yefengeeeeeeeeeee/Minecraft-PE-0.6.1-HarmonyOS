@@ -21,8 +21,12 @@ PlayerRenderer::PlayerRenderer( HumanoidModel* humanoidModel, float shadow )
 	armorParts2(new HumanoidModel(0.5f, 0, 64, 32))
 {
 	// default to legacy skin path until we know the exact texture size
+	// NOTE: the ctor parameter is also called "humanoidModel" and shadows the
+	// base-class member, so it must be qualified here - otherwise this line
+	// silently assigns to the parameter and HumanoidMobRenderer::humanoidModel
+	// keeps the 64x64 model (wrong arm UVs for the 64x32 default skin).
 	model = playerModel32;
-	humanoidModel = playerModel32;
+	this->humanoidModel = playerModel32;
 }
 
 PlayerRenderer::~PlayerRenderer() {
@@ -70,13 +74,20 @@ void PlayerRenderer::renderName( Mob* mob, float x, float y, float z ){
 	}
 }
 
+// @note fix player skin system: pick the 64x64 (modern) or 64x32 (legacy)
+// skeleton for the CURRENT texture. Must be callable from outside render()
+// because the first-person hand is drawn without going through render().
+void PlayerRenderer::setModernSkin(Mob* mob) {
+	HumanoidModel* desired = isModernPlayerSkin(mob) ? playerModel64 : playerModel32;
+	if (model != desired || this->humanoidModel != desired) {
+		model = desired;
+		this->humanoidModel = desired;
+	}
+}
+
 void PlayerRenderer::render(Entity* mob_, float x, float y, float z, float rot, float a) {
 	Mob* mob = (Mob*) mob_;
-	HumanoidModel* desired = isModernPlayerSkin(mob) ? playerModel64 : playerModel32;
-	if (model != desired || humanoidModel != desired) {
-		model = desired;
-		humanoidModel = desired;
-	}
+	setModernSkin(mob);
 //	LOGI("[PlayerRenderer] %s: skin=%s, modelTex=%dx%d, desired=%s\n", // don't log it always, only for debug - shredder
 //		((Player*)mob)->name.c_str(), mob->getTexture().c_str(), 
 //		humanoidModel->texWidth, humanoidModel->texHeight,

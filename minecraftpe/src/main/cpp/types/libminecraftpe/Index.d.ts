@@ -10,4 +10,5 @@ export const handleKeyText: (text: string, keyCode: number) => void;
 export const feedText: (text: string) => void;
 export const isKeyDown: (keyCode: number) => boolean;
 export const isKeyboardRequested: () => boolean;
+export const consumeOpenUrl: () => string;
 export const destroyRender: () => void;

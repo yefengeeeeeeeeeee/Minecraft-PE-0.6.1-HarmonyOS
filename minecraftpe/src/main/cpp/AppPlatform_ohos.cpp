@@ -9,6 +9,7 @@
 #include <hilog/log.h>
 #include <cstring>
 #include <atomic>
+#include <mutex>
 
 #define PIXEL_FORMAT_RGBA_8888 3
 
@@ -31,8 +32,48 @@ bool isRequested()
 }
 } // namespace ohos_soft_keyboard
 
-void openURL(const std::string& url) {
-    
+// 待打开的链接槽：渲染线程写、JS 线程取，所以用锁 + 标量状态，不用队列。
+// 只保留最新一个（连续点几个链接时，中间那些本来也没人看）。
+namespace ohos_open_url {
+static std::mutex g_mutex;
+static std::string g_pending;
+static bool g_hasPending = false;
+
+void request(const std::string& url)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_pending = url;
+    g_hasPending = true;
+}
+
+std::string take()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_hasPending) {
+        return std::string();
+    }
+    std::string out = g_pending;
+    g_pending.clear();
+    g_hasPending = false;
+    return out;
+}
+} // namespace ohos_open_url
+
+void AppPlatform_ohos::openURL(const std::string& url)
+{
+    if (url.empty()) {
+        return;
+    }
+
+    // CreditsScreen 里抓出来的可能只是域名（"bilibili.com"），
+    // 没有 scheme 的话系统匹配不到浏览器，补一个 https://。
+    std::string full = url;
+    if (full.find("://") == std::string::npos) {
+        full = "https://" + full;
+    }
+
+    LOGI("openURL -> %{public}s (交给 ArkTS 侧 openLink)", full.c_str());
+    ohos_open_url::request(full);
 }
 
 void AppPlatform_ohos::showKeyboard()

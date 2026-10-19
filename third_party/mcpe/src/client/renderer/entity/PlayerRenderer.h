@@ -12,6 +12,7 @@ public:
 
 	virtual int prepareArmor(Mob* mob, int layer, float a);
 	bool isModernPlayerSkin(Mob* mob);
+	void setModernSkin(Mob* mob);
 	virtual void render(Entity* mob, float x, float y, float z, float rot, float a);
 
 	virtual void setupPosition(Entity* mob, float x, float y, float z);

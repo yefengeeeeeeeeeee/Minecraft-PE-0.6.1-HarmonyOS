@@ -387,6 +387,25 @@ static int OhosKeyCodeToMcpe(int keyCode)
         case 2050: return ' ';
         case 2054: return 13;   // KEYCODE_ENTER -> RETURN
         case 2049: return 9;    // KEYCODE_TAB
+        // 标点：缺了这一段，物理键盘/模拟器 uinput 打 , . / ; ' [ ] - = ` \ 时
+        // keyText 常常是空的（或只有键名），回退查表又查不到 → 字符被整个丢掉，
+        // 表现就是「文本框里打不出 : ? " 等符号」。
+        // 这里给的是**未按 Shift 的下档字符**，上档符号由 ApplyShiftToChar() 换算。
+        case 2043: return ',';  // KEYCODE_COMMA
+        case 2044: return '.';  // KEYCODE_PERIOD
+        case 2056: return '`';  // KEYCODE_GRAVE
+        case 2057: return '-';  // KEYCODE_MINUS
+        case 2058: return '=';  // KEYCODE_EQUALS
+        case 2059: return '[';  // KEYCODE_LEFT_BRACKET
+        case 2060: return ']';  // KEYCODE_RIGHT_BRACKET
+        case 2061: return '\\'; // KEYCODE_BACKSLASH
+        case 2062: return ';';  // KEYCODE_SEMICOLON
+        case 2063: return '\''; // KEYCODE_APOSTROPHE
+        case 2064: return '/';  // KEYCODE_SLASH
+        case 2010: return '*';  // KEYCODE_STAR
+        case 2011: return '#';  // KEYCODE_POUND
+        case 2065: return '@';  // KEYCODE_AT
+        case 2066: return '+';  // KEYCODE_PLUS
         // 功能键
         case 2090: return 112;  // F1
         case 2091: return 113;  // F2
@@ -471,6 +490,48 @@ static napi_value handleKeyBoard(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+// 把「下档字符」换算成实际要输入的字符（US 布局）。
+//
+// 为什么要自己算：鸿蒙给过来的 keyText 并不总是最终字符 —— 按 Shift+; 时它可能
+// 给 ';'、也可能是空串（只剩 keyCode 可查表）。两条路最后都要经过这里，
+// 所以这个函数必须**幂等**：传进来已经是 ':' 且 Shift 按着，原样返回。
+static char ApplyShiftToChar(char c, bool shift)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return shift ? c : (char)(c - 'A' + 'a');
+    }
+    if (!shift) {
+        return c;
+    }
+    if (c >= 'a' && c <= 'z') {
+        return (char)(c - 'a' + 'A');
+    }
+    switch (c) {
+        case '1': return '!';
+        case '2': return '@';
+        case '3': return '#';
+        case '4': return '$';
+        case '5': return '%';
+        case '6': return '^';
+        case '7': return '&';
+        case '8': return '*';
+        case '9': return '(';
+        case '0': return ')';
+        case '`': return '~';
+        case '-': return '_';
+        case '=': return '+';
+        case '[': return '{';
+        case ']': return '}';
+        case '\\': return '|';
+        case ';': return ':';
+        case '\'': return '"';
+        case ',': return '<';
+        case '.': return '>';
+        case '/': return '?';
+        default: return c;
+    }
+}
+
 static napi_value handleKeyText(napi_env env, napi_callback_info info)
 {
     size_t argc = 2;
@@ -499,20 +560,21 @@ static napi_value handleKeyText(napi_env env, napi_callback_info info)
         if (c >= 32 && c < 127) {
             ch = (char)c;
         }
-    } else if (keyCode >= 0) {
+    }
+    // keyText 不可用时（标点键、模拟器 uinput 的 "KEYCODE_X"）回退查 keyCode 表。
+    // 注意：必须是「没拿到字符」才回退，不能写成 else if (keyCode >= 0)，
+    // 否则 text 是单个不可打印字符时会被悄悄吞掉。
+    if (!ch && keyCode >= 0) {
         int mapped = OhosKeyCodeToMcpe(keyCode);
         if (mapped >= 32 && mapped < 127) {
             ch = (char)mapped;
         }
     }
-    
-    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
-        bool shiftDown = Keyboard::isKeyDown(Keyboard::KEY_LSHIFT);
-        if (shiftDown && ch >= 'a' && ch <= 'z') {
-            ch = (char)(ch - 'a' + 'A');
-        } else if (!shiftDown && ch >= 'A' && ch <= 'Z') {
-            ch = (char)(ch - 'A' + 'a');
-        }
+
+    // 大小写 + 上档符号统一在这里换算（: ? " { 这些以前就是这么丢的）
+    bool shiftDown = Keyboard::isKeyDown(Keyboard::KEY_LSHIFT);
+    if (ch) {
+        ch = ApplyShiftToChar(ch, shiftDown);
     }
 
     if (ch) {
@@ -539,6 +601,11 @@ static napi_value FeedText(napi_env env, napi_callback_info info)
 
     // MCPE 0.6.1 的字体是 ASCII 位图，非 ASCII 字符画不出来，直接丢弃；
     // 但必须按 UTF-8 码点整体跳过，不能按字节拆（否则会拆出半个字符的乱码字节）。
+    //
+    // 例外：全角标点要「折」成半角再用。中文输入法默认会把 : ? ! " , 打成
+    // 全角（U+FF1A / U+FF1F ...），这些不是 ASCII，按原规则会被整颗丢掉，
+    // 用户看到的就是「文本框里打不出 : 和 ?」。Unicode 里全角 ASCII 区
+    // (U+FF01..U+FF5E) 与半角正好相差 0xFEE0，减一下即可。
     size_t i = 0;
     while (i < text.size()) {
         unsigned char c = (unsigned char)text[i];
@@ -553,8 +620,27 @@ static napi_value FeedText(napi_env env, napi_callback_info info)
         if (i + len > text.size()) {
             break;
         }
-        if (len == 1 && c >= 32 && c < 127) {
-            Keyboard::feedText((char)c);
+
+        unsigned int cp = 0;
+        if (len == 1) {
+            cp = c;
+        } else if (len == 2) {
+            cp = ((unsigned int)(c & 0x1F) << 6) | (unsigned int)(text[i + 1] & 0x3F);
+        } else if (len == 3) {
+            cp = ((unsigned int)(c & 0x0F) << 12)
+               | ((unsigned int)(text[i + 1] & 0x3F) << 6)
+               | (unsigned int)(text[i + 2] & 0x3F);
+        } // len == 4（emoji / 生僻字）：丢弃
+
+        // 全角 → 半角
+        if (cp >= 0xFF01 && cp <= 0xFF5E) {
+            cp -= 0xFEE0;
+        } else if (cp == 0x3000) {   // 全角空格
+            cp = ' ';
+        }
+
+        if (cp >= 32 && cp < 127) {
+            Keyboard::feedText((char)cp);
         }
         i += len;
     }
@@ -595,6 +681,19 @@ static napi_value IsKeyboardRequested(napi_env env, napi_callback_info info)
 }
 
 
+// ArkTS 每帧问一次：有没有要打开的链接？（CreditsScreen 点超链接时产生）
+// 有就返回 URL 并清空槽，没有返回空串。真正的「拉起浏览器」由 ArkTS 侧的
+// UIAbilityContext.openLink() 完成 —— napi_* 只能在 JS 线程调用，
+// 而引擎是在渲染线程里请求打开的，所以中间隔了这一层轮询。
+static napi_value ConsumeOpenUrl(napi_env env, napi_callback_info info)
+{
+    std::string url = ohos_open_url::take();
+    napi_value ret = nullptr;
+    napi_create_string_utf8(env, url.c_str(), url.size(), &ret);
+    return ret;
+}
+
+
 static napi_value DestroyRender(napi_env env, napi_callback_info info)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -617,6 +716,7 @@ static napi_value Init(napi_env env, napi_value exports)
         {"feedText", nullptr, FeedText, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"isKeyDown", nullptr, IsKeyDown, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"isKeyboardRequested", nullptr, IsKeyboardRequested, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"consumeOpenUrl", nullptr, ConsumeOpenUrl, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"destroyRender", nullptr, DestroyRender, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);

@@ -412,9 +412,16 @@ void ItemInHandRenderer::render( float a )
 
 		EntityRenderer* er = EntityRenderDispatcher::getInstance()->getRenderer(mc->player);
 		HumanoidMobRenderer* playerRenderer = (HumanoidMobRenderer*) er;
+		// 第一人称的手臂不经过 PlayerRenderer::render()，骨架必须在这里手动同步到
+		// 当前皮肤的布局（64x32 经典 / 64x64 现代），否则手臂会用错 UV 区域。
+		EntityRenderDispatcher::getInstance()->setModernSkin((Entity*)(player));
 		float ss = 1;
 		glScalef2(ss, ss, ss);
+		// 上面那句 glColor4f2(br,br,br,1) 对 VBO 模型绘制是无效的（统一色被强制成白），
+		// 结果手臂永远是全亮——夜里/洞里像在发光。这里打开强制统一色，让环境亮度真正生效。
+		mc_glForceUniformColor(true);
 		playerRenderer->renderHand();
+		mc_glForceUniformColor(false);
 		glPopMatrix2();
 	}
 	glDisable2(GL_RESCALE_NORMAL);
