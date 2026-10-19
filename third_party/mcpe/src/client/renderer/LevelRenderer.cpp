@@ -850,7 +850,12 @@ void LevelRenderer::renderHit( Player* player, const HitResult& h, int mode, /*I
 		if (destroyProgress > 0) {
 			Tesselator& t = Tesselator::instance;
 			glEnable2(GL_BLEND);
-			glBlendFunc2(GL_DST_COLOR, GL_SRC_COLOR);
+			// 破坏进度（裂纹）用普通 alpha 混合：
+			// 原来的 GL_DST_COLOR/GL_SRC_COLOR 是「乘算」，等于把整块方块压暗，
+			// 裂纹贴图里 alpha 只有 1/255 的空白区也会被一起乘法处理，
+			// 挖方块时整块看起来发黑。改成按 alpha 叠加后只有裂纹本身会被画出来
+			// （空白区 alpha≈0，被 alpha test 直接丢弃），方块亮度保持原样。
+			glBlendFunc2(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 			textures->loadAndBindTexture("terrain.png");
 			glPushMatrix2();
@@ -862,7 +867,7 @@ void LevelRenderer::renderHit( Player* player, const HitResult& h, int mode, /*I
 			glPolygonOffset(-3.0f, -3.0f);
 			glEnable2(GL_POLYGON_OFFSET_FILL);
 			t.begin();
-			t.color(1.0f, 1.0f, 1.0f, 0.5f);
+			t.color(1.0f, 1.0f, 1.0f, 0.85f);
 			t.noColor();
 			float xo = player->xOld + (player->x - player->xOld) * a;
 			float yo = player->yOld + (player->y - player->yOld) * a;
@@ -1592,8 +1597,11 @@ void LevelRenderer::renderHitSelect( Player* player, const HitResult& h, int mod
 		Tesselator& t = Tesselator::instance;
 		glEnable2(GL_BLEND);
 		glDisable2(GL_TEXTURE_2D);
+		// 选中方块的高亮改成「加法混合」：只在方块原色上叠一层亮部，永远不会变暗。
+		// 原来用的是 GL_DST_COLOR / GL_SRC_COLOR（结果为 2*dst*0.65*贴图），
+		// 对石头这类中等亮度贴图（贴图亮度≈0.5）算下来只有 0.65*dst，
+		// 表现出来就是「选中的方块整体变黑」，按住挖方块时尤其明显。
 		glBlendFunc2(GL_SRC_ALPHA, GL_ONE);
-		glBlendFunc2(GL_DST_COLOR, GL_SRC_COLOR);
 		glEnable2(GL_DEPTH_TEST);
 
 		textures->loadAndBindTexture("terrain.png");
@@ -1604,7 +1612,9 @@ void LevelRenderer::renderHitSelect( Player* player, const HitResult& h, int mod
 
 		//LOGI("block: %d - %d (%s)\n", tileId, level->getData(h.x, h.y, h.z), tile==NULL?"null" : tile->getDescriptionId().c_str() );
 
-		const float br = 0.65f;
+		// 叠加量 = br*贴图亮度（混合时再乘一次 alpha），0.55 大约是 +0.2 的提亮，
+		// 能看出「被选中」，又不会把沙子/雪这类亮方块糊成纯白。
+		const float br = 0.55f;
 		glColor4f2(br * 1.0f, br * 1.0f, br * 1.0f, br * 1.0f);
 		glPushMatrix2();
 

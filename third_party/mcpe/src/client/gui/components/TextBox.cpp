@@ -58,6 +58,12 @@ void TextBox::charPressed(Minecraft* minecraft, char c)  {
 void TextBox::keyPressed(Minecraft* minecraft, int key) {
     if (focused && key == Keyboard::KEY_BACKSPACE && !text.empty()) {
         text.pop_back();
+    } else if (focused && (key == Keyboard::KEY_RETURN || key == Keyboard::KEY_ESCAPE)) {
+        // 「发送 / 回车 / 返回」= 这次输入结束：
+        // 引擎这边必须自己放掉焦点（loseFocus → hideKeyboard），
+        // 否则 ArkTS 侧每帧轮询到的「引擎还要键盘」永远是 true，
+        // 输入法收起来之后又会被重新拉起 —— 表现就是键盘沉下去再弹回来。
+        loseFocus(minecraft);
     }
 }
 

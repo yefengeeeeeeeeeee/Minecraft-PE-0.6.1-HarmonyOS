@@ -8,12 +8,46 @@
 
 #include <hilog/log.h>
 #include <cstring>
+#include <atomic>
 
 #define PIXEL_FORMAT_RGBA_8888 3
 
 #define LOGTAG "MCPE-Platform"
 #define LOGI(...) OH_LOG_Print(LOG_APP, LOG_INFO, LOG_DOMAIN, LOGTAG, __VA_ARGS__)
 #define LOGE(...) OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_DOMAIN, LOGTAG, __VA_ARGS__)
+
+// showKeyboard() 在渲染线程里被调用，ArkTS 每帧在 UI 线程里轮询，用原子量最省心。
+namespace ohos_soft_keyboard {
+static std::atomic<bool> g_requested(false);
+
+void setRequested(bool wanted)
+{
+    g_requested.store(wanted);
+}
+
+bool isRequested()
+{
+    return g_requested.load();
+}
+} // namespace ohos_soft_keyboard
+
+void AppPlatform_ohos::showKeyboard()
+{
+    if (!ohos_soft_keyboard::isRequested()) {
+        LOGI("showKeyboard -> 请求弹出系统输入法");
+    }
+    ohos_soft_keyboard::setRequested(true);
+    super::showKeyboard();
+}
+
+void AppPlatform_ohos::hideKeyboard()
+{
+    if (ohos_soft_keyboard::isRequested()) {
+        LOGI("hideKeyboard -> 请求收起系统输入法");
+    }
+    ohos_soft_keyboard::setRequested(false);
+    super::hideKeyboard();
+}
 
 AppPlatform_ohos::AppPlatform_ohos()
 :   _isInited(false),

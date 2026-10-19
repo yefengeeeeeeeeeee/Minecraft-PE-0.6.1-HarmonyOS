@@ -100,12 +100,16 @@ void OptionsItem::render( Minecraft* minecraft, int xm, int ym ) {
 		// Java-style brightness labels. Four buckets matching Java's vanilla
 		// stops: Moody (very dim, no boost), Dark, Normal (default), Bright!
 		// (max boost).
+		// The buckets are exclusive on the lower bound so that the default
+		// value (gamma == 0.5, which is exactly the "Normal" ramp) is NOT
+		// labelled "Dark" — the old `<=` chain did that, which made the
+		// default look like the user had deliberately dimmed the game.
 		float v = minecraft->options.getProgressValue(OPTIONS_BRIGHTNESS);
 		std::string gammaText;
-		if      (v <= 0.25f) gammaText = I18n::get("options.gamma.moody");
-		else if (v <= 0.50f) gammaText = I18n::get("options.gamma.dark");
-		else if (v <= 0.75f) gammaText = I18n::get("options.gamma.normal");
-		else                 gammaText = I18n::get("options.gamma.bright");
+		if      (v < 0.25f) gammaText = I18n::get("options.gamma.moody");
+		else if (v < 0.50f) gammaText = I18n::get("options.gamma.dark");
+		else if (v < 0.75f) gammaText = I18n::get("options.gamma.normal");
+		else                gammaText = I18n::get("options.gamma.bright");
 		text += ": " + gammaText;
 	}
 

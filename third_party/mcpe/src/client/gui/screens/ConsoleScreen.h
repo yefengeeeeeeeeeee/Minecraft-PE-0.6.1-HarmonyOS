@@ -14,6 +14,7 @@ public:
     void init();
     void render(int xm, int ym, float a);
     void tick();
+    virtual void removed();
 
     virtual bool renderGameBehind() { return true; }
     virtual bool isInGameScreen()   { return true; }

@@ -2,6 +2,7 @@
 #include "../Gui.h"
 #include "../../Minecraft.h"
 #include "../../player/LocalPlayer.h"
+#include "../../../AppPlatform.h"
 #include "../../../platform/input/Keyboard.h"
 #include "../../../world/level/Level.h"
 #include "../../../network/RakNetInstance.h"
@@ -21,6 +22,17 @@ ConsoleScreen::ConsoleScreen()
 
 void ConsoleScreen::init()
 {
+    // 聊天框一打开就请求屏幕键盘。
+    // 触摸端的聊天按钮（TouchscreenInput 的 AREA_CHAT）已经自己调过一次，
+    // 但 T 键 / 其他入口打开聊天框时没人调，这里补上（showKeyboard 可重复调用）。
+    minecraft->platform()->showKeyboard();
+}
+
+void ConsoleScreen::removed()
+{
+    // 聊天框被关掉（回车发送 / ESC / 切到别的界面）时收起屏幕键盘，
+    // 否则键盘会一直压在画面上，把整个游戏界面顶上去。
+    minecraft->platform()->hideKeyboard();
 }
 
 void ConsoleScreen::tick()

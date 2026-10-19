@@ -453,9 +453,14 @@ static napi_value handleKeyBoard(napi_env env, napi_callback_info info)
     // 若每次都 feed，会 1) 让 Keyboard::_inputs 队列暴涨、2) 跨 NAPI + 抢 g_mutex
     // 频繁打断渲染循环，导致「按住前进却一卡一卡」。
     // 因此：DOWN 且该键已经处于 DOWN 状态 → 直接忽略（重复按下）；UP 才透传。
+    // 反过来，UP 也必须是幂等的：ArkTS 侧在去抖/兜底时可能补发多次 Up，
+    // 重复的 Up 再喂一遍没有意义，只会让上层多处理一次按键事件。
     bool alreadyDown = Keyboard::isKeyDown(mcpeKey);
     if (isDown && alreadyDown) {
         return nullptr; // repeat Down，去重
+    }
+    if (!isDown && !alreadyDown) {
+        return nullptr; // 重复 Up，去重
     }
 
     LOGI("handleKeyBoard keyCode=%{public}d -> mcpeKey=%{public}d %{public}s",
@@ -500,19 +505,95 @@ static napi_value handleKeyText(napi_env env, napi_callback_info info)
             ch = (char)mapped;
         }
     }
-    // 统一转小写：MCPE 0.6.1 的文本输入（聊天 / 告示牌 / 命名）本身不区分大小写，
-    // 引擎内所有字母都应是小写。OhosKeyCodeToMcpe 对字母返回大写 ASCII（'A'=65），
-    // 模拟器 uinput 的 keyText 是 "KEYCODE_X" 键名，走 keyCode 回退必然得到大写字母，
-    // 若不转小写，告示牌上就会显示全大写。真实键盘 keyText 单字符（如 "w"）已是小写，
-    // 这里统一再转一次也无副作用。
-    if (ch >= 'A' && ch <= 'Z') {
-        ch = (char)(ch - 'A' + 'a');
+    
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+        bool shiftDown = Keyboard::isKeyDown(Keyboard::KEY_LSHIFT);
+        if (shiftDown && ch >= 'a' && ch <= 'z') {
+            ch = (char)(ch - 'a' + 'A');
+        } else if (!shiftDown && ch >= 'A' && ch <= 'Z') {
+            ch = (char)(ch - 'A' + 'a');
+        }
     }
+
     if (ch) {
         Keyboard::feedText(ch);
     }
     return nullptr;
 }
+
+// 软键盘 / 输入法一次性提交的文本（可能一次给出多个字符，例如拼音候选词上屏）。
+// ArkTS 侧的隐藏输入框按「增量」把新输入的内容送到这里，原样保留大小写。
+static napi_value FeedText(napi_env env, napi_callback_info info)
+{
+    size_t argc = 1;
+    napi_value args[1] = { nullptr };
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 1) {
+        return nullptr;
+    }
+
+    std::string text = GetStringArg(env, args[0]);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    // MCPE 0.6.1 的字体是 ASCII 位图，非 ASCII 字符画不出来，直接丢弃；
+    // 但必须按 UTF-8 码点整体跳过，不能按字节拆（否则会拆出半个字符的乱码字节）。
+    size_t i = 0;
+    while (i < text.size()) {
+        unsigned char c = (unsigned char)text[i];
+        size_t len = 1;
+        if ((c & 0xE0) == 0xC0) {
+            len = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            len = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            len = 4;
+        }
+        if (i + len > text.size()) {
+            break;
+        }
+        if (len == 1 && c >= 32 && c < 127) {
+            Keyboard::feedText((char)c);
+        }
+        i += len;
+    }
+    return nullptr;
+}
+
+// ArkTS 每帧核对一次「引擎里这个键现在还是按下状态吗」。
+// 用途：长按期间如果系统/模拟器补发了 Up（或事件成对抖动），引擎里的按键
+// 状态会被清掉，玩家就会表现为「走一下、停一下」。ArkTS 侧拿这个查询做自愈：
+// 发现状态丢了就立刻补一次按下。参数是鸿蒙键码，映射不到的一律返回 true
+// （调用方据此不再补发，避免给功能键发送无意义的重复按下）。
+static napi_value IsKeyDown(napi_env env, napi_callback_info info)
+{
+    size_t argc = 1;
+    napi_value args[1] = { nullptr };
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t keyCode = (argc >= 1) ? GetIntArg(env, args[0], -1) : -1;
+
+    bool down = true;
+    int mcpeKey = (keyCode >= 0) ? OhosKeyCodeToMcpe(keyCode) : -1;
+    if (mcpeKey >= 0) {
+        down = Keyboard::isKeyDown(mcpeKey);
+    }
+
+    napi_value ret = nullptr;
+    napi_get_boolean(env, down, &ret);
+    return ret;
+}
+
+// ArkTS 每帧问一次：引擎现在需不需要文本输入？需要就去聚焦隐藏输入框，
+// 系统输入法（屏幕键盘）会随焦点自动弹出。
+static napi_value IsKeyboardRequested(napi_env env, napi_callback_info info)
+{
+    napi_value ret = nullptr;
+    napi_get_boolean(env, ohos_soft_keyboard::isRequested(), &ret);
+    return ret;
+}
+
 
 static napi_value DestroyRender(napi_env env, napi_callback_info info)
 {
@@ -533,6 +614,9 @@ static napi_value Init(napi_env env, napi_value exports)
         {"renderTouch", nullptr, RenderTouch, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"handleKeyBoard", nullptr, handleKeyBoard, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"handleKeyText", nullptr, handleKeyText, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"feedText", nullptr, FeedText, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"isKeyDown", nullptr, IsKeyDown, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"isKeyboardRequested", nullptr, IsKeyboardRequested, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"destroyRender", nullptr, DestroyRender, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);

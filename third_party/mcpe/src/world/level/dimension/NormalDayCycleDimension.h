@@ -40,9 +40,10 @@ public:
 		float r = ((fogColor >> 16) & 0xff) / 255.0f;
 		float g = ((fogColor >> 8) & 0xff) / 255.0f;
 		float b = ((fogColor) & 0xff) / 255.0f;
-		r *= br * 0.94f + 0.06f;
-		g *= br * 0.94f + 0.06f;
-		b *= br * 0.91f + 0.09f;
+		// Same night floor as Dimension::getFogColor — keep the two in sync.
+		r *= br * 0.90f + 0.10f;
+		g *= br * 0.90f + 0.10f;
+		b *= br * 0.82f + 0.18f;
 
 		//LOGI("rgb: %f, %f, %f\n", r, g, b);
 

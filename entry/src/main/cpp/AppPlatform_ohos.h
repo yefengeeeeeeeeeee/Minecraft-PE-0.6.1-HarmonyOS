@@ -8,6 +8,16 @@
 
 struct NativeResourceManager;
 
+// 屏幕键盘（软键盘）桥接。
+// 引擎侧（TextBox::setFocus / TextEditScreen / TouchscreenInput 的聊天按钮）
+// 通过 AppPlatform::showKeyboard() / hideKeyboard() 表达「现在需要输入文本」，
+// 这里只记一个标志；ArkTS 侧每帧轮询它，再决定弹出/收起系统输入法。
+// 之所以不新加一个 .cpp，是因为 CMakeLists 里 entry 的源文件是显式列出的。
+namespace ohos_soft_keyboard {
+    void setRequested(bool wanted);
+    bool isRequested();
+}
+
 class AppPlatform_ohos : public AppPlatform
 {
     typedef AppPlatform super;
@@ -33,6 +43,11 @@ public:
     virtual void showDialog(int dialogId) override {}
     virtual void createUserInput() override {}
     virtual void finish() override {}
+
+    // 输入法（软键盘）
+    virtual void showKeyboard() override;
+    virtual void hideKeyboard() override;
+    virtual bool isKeyboardVisible() override { return ohos_soft_keyboard::isRequested(); }
 
     const std::string& getFilesDir() const { return _filesDir; }
 

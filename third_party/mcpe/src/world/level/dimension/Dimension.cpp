@@ -69,16 +69,25 @@ float Dimension::s_brightness = 0.5f;
 
 void Dimension::updateLightRamp()
 {
+	// Minimum scene brightness at light level 0 (caves, unlit interiors).
 	float ambient = 0.05f;
 	float gamma = Dimension::s_brightness;
 	for (int i = 0; i <= 15; ++i) {
-		// Pow curve: nearly black at low light, full white at light 15. The
-		// old ((1-v)/(v*3+1)) curve plus the +ambient*3 floor produced a
-		// brightnessRamp[4] of ~0.21 — that's bright enough at midnight
-		// (effective sky-light 4) to make the surface look like dusk.
-		// Power 2.5 gives ramp[4] ≈ 0.06, properly dark.
+		// Light levels are baked into the chunk vertex colours, so this table
+		// is the entire "how bright is the world" knob.
+		//
+		// At midnight the day cycle leaves skyDarken at 11, i.e. the surface
+		// sits at raw light 4/15. A pow(t, 2.5) curve put that at 0.085 —
+		// barely 8% of daylight, which on a phone screen is pitch black: you
+		// could not see the block you were standing on, only the (fully lit)
+		// item in your hand. That is the "night is too dark" report.
+		//
+		// pow(t, 0.8) keeps light 0 at the ambient floor (caves stay dark,
+		// torches still matter) but lifts light 4 to ~0.38, which is the
+		// playable moonlit night the original game had. Daylight (light 15)
+		// is still exactly 1.0, so daytime is unchanged.
 		float t = i / 15.0f;
-		float base = powf(t, 2.5f) * (1.0f - ambient) + ambient;
+		float base = powf(t, 0.8f) * (1.0f - ambient) + ambient;
 		// Centred gamma slider — 0.5 is the historic look. Above 0.5 lifts
 		// dark levels toward ~0.5 (Java's "Bright!"); below 0.5 darkens.
 		if (gamma > 0.5f) {
@@ -132,9 +141,15 @@ Vec3 Dimension::getFogColor( float td, float a )
 	float r = ((fogColor >> 16) & 0xff) / 255.0f;
 	float g = ((fogColor >> 8) & 0xff) / 255.0f;
 	float b = ((fogColor) & 0xff) / 255.0f;
-	r *= br * 0.94f + 0.06f;
-	g *= br * 0.94f + 0.06f;
-	b *= br * 0.91f + 0.09f;
+	// The night floor is the colour the sky/brightness clears to at midnight.
+	// The old 0.06/0.09 floor multiplied the pale sky blue down to ~(8,13,23),
+	// which reads as pure black once the terrain is only dimly lit — the
+	// horizon disappeared and the whole screen looked like a void. Keep the
+	// daytime value untouched (the factors still sum to 1.0) but leave a
+	// deep navy behind the world at night so silhouettes stay readable.
+	r *= br * 0.90f + 0.10f;
+	g *= br * 0.90f + 0.10f;
+	b *= br * 0.82f + 0.18f;
 	return Vec3(r, g, b);
 	
 	 //

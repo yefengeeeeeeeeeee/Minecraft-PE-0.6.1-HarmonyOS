@@ -10,8 +10,13 @@ include_directories(
     ${NATIVERENDER_ROOT_PATH}
     ${NATIVERENDER_ROOT_PATH}/GLES
     ${MCPE_SRC_ROOT}
-    ${OHOS_SYSROOT_INCLUDE}
 )
+
+# 该路径是 Windows 上 DevEco 的 NDK sysroot 头目录，换平台后不存在。
+# 存在才 include（NDK 工具链本身已经带了 sysroot，这里只是兜底）。
+if(EXISTS "${OHOS_SYSROOT_INCLUDE}")
+    include_directories(${OHOS_SYSROOT_INCLUDE})
+endif()
 
 file(GLOB_RECURSE MCPE_SOURCES CONFIGURE_DEPENDS
     ${MCPE_SRC_ROOT}/*.cpp
