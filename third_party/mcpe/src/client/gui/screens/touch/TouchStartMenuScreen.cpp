@@ -59,17 +59,10 @@ void StartMenuScreen::init()
 	buttons.push_back(&bJoin);
 	buttons.push_back(&bOptions);
 
-	// add quit icon (same look as options header)
-	{
-		ImageDef def;
-		def.name = "gui/touchgui.png";
-		def.width = 34;
-		def.height = 26;
-		def.setSrc(IntRectangle(150, 0, (int)def.width, (int)def.height));
-		bQuit.setImageDef(def, true);
-		bQuit.scaleWhenPressed = false;
-		buttons.push_back(&bQuit);
-	}
+	// 主界面右上角的「X」退出图标已去除：
+	// 触屏上误触率太高（它就在标题栏右侧，手指划屏时很容易点到直接退出游戏），
+	// 退出改为只走系统返回键（见 handleBackEvent）。
+	// bQuit 保留为普通成员，但不再加入 buttons，也就不再被绘制/命中。
 
 	tabButtons.push_back(&bHost);
 	tabButtons.push_back(&bJoin);
@@ -123,10 +116,7 @@ void StartMenuScreen::setupPositions() {
 	bHost.x		= 1*buttonWidth + (int)(2*spacing);
 	bOptions.x	= 2*buttonWidth + (int)(3*spacing);
     
-	// quit icon top-right (use size assigned in init)
-	bQuit.x = width - bQuit.width;
-	bQuit.y = 0;
-
+	// 右上角不再放置退出图标（已删除），这里只算底部版权/版本号位置
 	copyrightPosX = width - minecraft->font->width(copyright) - 1;
 	versionPosX = (width - minecraft->font->width(version)) / 2;// - minecraft->font->width(version) - 2;
 }

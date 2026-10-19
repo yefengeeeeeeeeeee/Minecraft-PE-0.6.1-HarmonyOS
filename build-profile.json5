@@ -27,8 +27,8 @@
   },
   "modules": [
     {
-      "name": "entry",
-      "srcPath": "./entry",
+      "name": "minecraftpe",
+      "srcPath": "./minecraftpe",
       "targets": [
         {
           "name": "default",
