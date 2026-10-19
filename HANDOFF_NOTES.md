@@ -14,7 +14,7 @@
 
 1. 签名材料在 `C:\Users\Administrator\.ohos\config\`，文件名为 `default_mcpe-ohos_*`（`.cer` / `.p7b` / `.p12`）。
 2. `build-profile.json5` 里写死了这些证书的**绝对路径**和密码。**换机器 / 换用户 / 移动 `.ohos` 目录后，签名会失效**，需要重新生成签名或在 DevEco Studio 中自动签名。
-3. 包名是 `com.example.mcpe`，若修改包名需同步更新 `AppScope/app.json5`，并重新签名。
+3. 包名是 `net.minecraft.pe`，若修改包名需同步更新 `AppScope/app.json5`，并重新签名。
 
 ## 三、构建常见问题
 
@@ -44,7 +44,7 @@
 ## 六、当前设备
 
 - 测试设备序列号：`4NZ0225605001361`
-- 已安装并启动验证通过（进程 `com.example.mcpe`）。
+- 已安装并启动验证通过（进程 `net.minecraft.pe`）。
 
 ## 七、快速上手清单
 
@@ -52,5 +52,5 @@
 2. 配置构建环境变量（见构建命令）。
 3. 执行 `assembleHap` 构建。
 4. `hdc install -r` 安装到设备。
-5. `aa start -a EntryAbility -b com.example.mcpe` 启动。
+5. `aa start -a EntryAbility -b net.minecraft.pe` 启动。
 6. `hdc hilog -x -e` 查看日志。

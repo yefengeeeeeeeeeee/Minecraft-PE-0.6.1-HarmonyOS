@@ -7,7 +7,7 @@
 | 项目 | 内容 |
 |------|------|
 | 工程名 | mcpe-ohos |
-| 包名（bundleName） | `com.example.mcpe` |
+| 包名（bundleName） | `net.minecraft.pe` |
 | 应用名 | MCPE game port |
 | 版本 | 1.0.0（versionCode 1000000） |
 | SDK | API 26（targetSdkVersion / compatibleSdkVersion / compileSdkVersion 均为 26.0.0） |
@@ -104,7 +104,7 @@ $env:DEVECO_SDK_HOME = "C:\Program Files\Huawei\DevEco Studio\sdk"
 
 **启动**：
 ```powershell
-& "C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe" shell "aa start -a EntryAbility -b com.example.mcpe"
+& "C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe" shell "aa start -a EntryAbility -b net.minecraft.pe"
 ```
 
 **当前测试设备**：`4NZ0225605001361`
@@ -112,5 +112,5 @@ $env:DEVECO_SDK_HOME = "C:\Program Files\Huawei\DevEco Studio\sdk"
 ## 七、当前状态
 
 - 已成功构建并通过真机安装、启动测试。
-- 应用进程 `com.example.mcpe` 在设备上运行正常，无崩溃日志。
+- 应用进程 `net.minecraft.pe` 在设备上运行正常，无崩溃日志。
 - 已生成完整安装包（含构建产物）。

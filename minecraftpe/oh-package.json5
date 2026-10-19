@@ -1,0 +1,10 @@
+{
+  "name": "minecraftpe",
+  "version": "1.0.0",
+  "description": "EGL probe entry",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+  }
+}

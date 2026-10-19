@@ -32,19 +32,21 @@ void CreditsScreen::init() {
     // prepare text lines
     _lines.clear();
     _lines.push_back("Minecraft: Pocket Edition");
-    _lines.push_back("Original game by Mojang");
     _lines.push_back("");
     _lines.push_back("Programmers:");
     _lines.push_back("mschiller890");
-    _lines.push_back("InviseDivine");
-    _lines.push_back("Kolyah35");
-    _lines.push_back("karson");
+    _lines.push_back("rootrd");
+    _lines.push_back("Cdlinuxit43");
+    _lines.push_back("yefengeeeeee");
     _lines.push_back("deepfriedwaffles");
     _lines.push_back("EpikIzCool");
 	_lines.push_back("fileshredder");
     _lines.push_back("");
     // avoid color tags around the URL so it isn't mangled by the parser please
-    _lines.push_back("Join our Discord server: https://discord.gg/c58YesBxve");
+    _lines.push_back("Authors Link:");
+    _lines.push_back("https://space.bilibili.com/284615092");
+    _lines.push_back("https://space.bilibili.com/663115435");
+    _lines.push_back("https://space.bilibili.com/1624428827");
     _scrollSpeed = 0.5f;
     _scrollY = height; // start below screen
 }
@@ -92,7 +94,7 @@ void CreditsScreen::render(int xm, int ym, float a) {
         float lineWidth = Gui::getColoredWidth(font, line);
         Gui::drawColoredString(font, line, w/2 - lineWidth/2, (int)y, 255);
         // underline hyperlink lines manually
-        if (line.find("http") != std::string::npos || line.find("discord.gg") != std::string::npos) {
+        if (line.find("http") != std::string::npos || line.find("bilibili.com") != std::string::npos) {
             float x0 = w/2 - lineWidth/2;
             float y0 = y + font->lineHeight - 1;
             this->fill(x0, y0, x0 + lineWidth, y0 + 1, 0xffffffff);
@@ -118,7 +120,7 @@ void CreditsScreen::mouseClicked(int x, int y, int buttonNum) {
             const std::string& line = _lines[i];
             size_t start = line.find("http");
             if (start == std::string::npos)
-                start = line.find("discord.gg");
+                start = line.find("bilibili.com");
             if (start != std::string::npos) {
                 // extract until space
                 size_t end = line.find(' ', start);
