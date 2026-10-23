@@ -8,9 +8,11 @@
 class Container;
 class Player;
 class ChestTileEntity;
-class ImageButton;
-class NinePatchLayer;
 
+// Java-style chest UI: chest grid on top + main inventory + hotbar on bottom.
+// Uses the same slot/cursor model as DesktopCraftingScreen but with no result
+// slot or recipe matching. Shift-click moves items between chest <-> player
+// inventory.
 class DesktopChestScreen : public Screen
 {
     typedef Screen super;
@@ -24,7 +26,6 @@ public:
     void tick();
     void mouseClicked(int x, int y, int buttonNum);
     void keyPressed(int eventKey);
-    void buttonClicked(Button* button);
     void removed();
 
     bool renderGameBehind() { return true; }
@@ -48,16 +49,12 @@ private:
 
     int bgX, bgY, bgW, bgH;
 
-    ImageButton*    btnClose;
-    NinePatchLayer* guiBackground;
-    NinePatchLayer* guiSlot;
-    NinePatchLayer* guiSlotMarker;
-
     void rebuildSlots();
     int findSlotAt(int x, int y);
     void onSlotClick(int slotIdx, int buttonNum, bool shift);
     void shiftClickFrom(int slotIdx);
     bool tryDistributeStack(ItemInstance& stack, int rangeBegin, int rangeEnd);
+    void renderSlotBg(int x, int y);
 };
 
 #endif

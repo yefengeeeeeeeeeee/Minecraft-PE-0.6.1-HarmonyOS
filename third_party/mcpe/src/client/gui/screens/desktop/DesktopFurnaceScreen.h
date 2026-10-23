@@ -8,9 +8,10 @@
 class Container;
 class Player;
 class FurnaceTileEntity;
-class ImageButton;
-class NinePatchLayer;
 
+// Java-style furnace UI: input + fuel slots on the left, an arrow + flame
+// progress display in the middle, output slot on the right, then the player's
+// main inventory and hotbar below.
 class DesktopFurnaceScreen : public Screen
 {
     typedef Screen super;
@@ -24,7 +25,6 @@ public:
     void tick();
     void mouseClicked(int x, int y, int buttonNum);
     void keyPressed(int eventKey);
-    void buttonClicked(Button* button);
     void removed();
 
     bool renderGameBehind() { return true; }
@@ -50,27 +50,23 @@ private:
     ItemInstance cursorItem;
     std::vector<Slot> slots;
 
+    // Index ranges (in `slots`)
     int furnaceSlotsBegin, furnaceSlotsEnd;
     int hotbarSlotsBegin, hotbarSlotsEnd;
     int invSlotsBegin, invSlotsEnd;
 
     int bgX, bgY, bgW, bgH;
 
-    ImageButton*    btnClose;
-    NinePatchLayer* guiBackground;
-    NinePatchLayer* guiSlot;
-    NinePatchLayer* guiSlotMarker;
-
+    // Coords of the cook-arrow and flame indicators (computed in rebuildSlots).
     int arrowX, arrowY;
     int flameX, flameY;
-
-    int contentY_arrow_y();
 
     void rebuildSlots();
     int findSlotAt(int x, int y);
     void onSlotClick(int slotIdx, int buttonNum, bool shift);
     void shiftClickFrom(int slotIdx);
     bool tryDistributeStack(ItemInstance& stack, int rangeBegin, int rangeEnd);
+    void renderSlotBg(int x, int y);
 };
 
 #endif

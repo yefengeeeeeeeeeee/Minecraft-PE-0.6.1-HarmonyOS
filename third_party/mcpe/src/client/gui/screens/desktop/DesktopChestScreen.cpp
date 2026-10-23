@@ -3,18 +3,14 @@
 #include "../../../Minecraft.h"
 #include "../../../player/LocalPlayer.h"
 #include "../../../renderer/entity/ItemRenderer.h"
-#include "../../../renderer/Tesselator.h"
 #include "../../Font.h"
 #include "../../Gui.h"
-#include "../../components/ImageButton.h"
-#include "../../components/NinePatch.h"
 #include "../../../../world/entity/player/Player.h"
 #include "../../../../world/entity/player/Inventory.h"
 #include "../../../../world/inventory/FillingContainer.h"
 #include "../../../../world/level/tile/entity/ChestTileEntity.h"
 #include "../../../../world/item/Item.h"
 #include "../../../../world/item/ItemInstance.h"
-#include "../../../../locale/I18n.h"
 #include "platform/input/Mouse.h"
 #include "platform/input/Keyboard.h"
 
@@ -23,6 +19,10 @@ const int SLOT_SIZE      = 18;
 const int SLOT_INNER     = 16;
 const int SLOT_PAD       = 1;
 
+const int COLOR_BG       = 0xc0202020;
+const int COLOR_FRAME    = 0xff8b8b8b;
+const int COLOR_SLOT     = 0xff5b5b5b;
+const int COLOR_HOVER    = 0x80ffffff;
 const int COLOR_TEXT     = 0xffe0e0e0;
 const int COLOR_TOOLTIP_BG = 0xe0100010;
 const int COLOR_TOOLTIP_FR = 0xff5000ff;
@@ -52,18 +52,12 @@ DesktopChestScreen::DesktopChestScreen(Player* player_, ChestTileEntity* chest_)
     chestSlotsBegin(0), chestSlotsEnd(0),
     hotbarSlotsBegin(0), hotbarSlotsEnd(0),
     invSlotsBegin(0), invSlotsEnd(0),
-    bgX(0), bgY(0), bgW(0), bgH(0),
-    btnClose(NULL),
-    guiBackground(NULL), guiSlot(NULL), guiSlotMarker(NULL)
+    bgX(0), bgY(0), bgW(0), bgH(0)
 {
     cursorItem.setNull();
 }
 
 DesktopChestScreen::~DesktopChestScreen() {
-    delete btnClose;
-    delete guiBackground;
-    delete guiSlot;
-    delete guiSlotMarker;
     if (chest && chest->clientSideOnly)
         delete chest;
 }
@@ -71,35 +65,10 @@ DesktopChestScreen::~DesktopChestScreen() {
 void DesktopChestScreen::init() {
     super::init();
     rebuildSlots();
-
-    NinePatchFactory builder(minecraft->textures, "gui/spritesheet.png");
-    guiBackground = builder.createSymmetrical(IntRectangle(0, 0, 16, 16), 4, 4);
-    guiSlot       = builder.createSymmetrical(IntRectangle(0, 32, 8, 8), 3, 3);
-    guiSlotMarker = builder.createSymmetrical(IntRectangle(10, 42, 16, 16), 5, 5);
-
-    if (!btnClose) {
-        btnClose = new ImageButton(0, "");
-        ImageDef def;
-        def.name = "gui/spritesheet.png";
-        def.x = 0; def.y = 1;
-        def.width = def.height = 18;
-        def.setSrc(IntRectangle(60, 0, 18, 18));
-        btnClose->setImageDef(def, true);
-        btnClose->scaleWhenPressed = false;
-        buttons.push_back(btnClose);
-    }
 }
 
 void DesktopChestScreen::setupPositions() {
-    rebuildSlots();
-
-    if (btnClose) {
-        btnClose->width  = 19;
-        btnClose->height = 19;
-        btnClose->x = bgX + bgW - btnClose->width;
-        btnClose->y = bgY;
-    }
-    if (guiBackground) guiBackground->setSize((float)bgW, (float)bgH);
+    init();
 }
 
 void DesktopChestScreen::tick() {
@@ -124,13 +93,13 @@ void DesktopChestScreen::rebuildSlots() {
 
     bgX = (width  - bgW) / 2;
     bgY = (height - bgH) / 2;
-    if (bgY < 22) bgY = 22;
 
     int contentX = bgX + innerPad;
     int contentY = bgY + innerPad + titleH;
 
     slots.clear();
 
+    // Chest grid
     chestSlotsBegin = (int)slots.size();
     for (int row = 0; row < chestRows; ++row) {
         for (int col = 0; col < chestCols; ++col) {
@@ -146,6 +115,7 @@ void DesktopChestScreen::rebuildSlots() {
     }
     chestSlotsEnd = (int)slots.size();
 
+    // PE inventory link-aware exclusion list (see DesktopCraftingScreen for explanation).
     const int numLinked = inv->getNumLinkedSlots();
     bool isLinkedTarget[256] = { false };
     for (int h = 0; h < numLinked && h < 256; ++h) {
@@ -193,19 +163,20 @@ int DesktopChestScreen::findSlotAt(int x, int y) {
     return -1;
 }
 
+void DesktopChestScreen::renderSlotBg(int x, int y) {
+    fill(x,             y,             x + SLOT_SIZE, y + SLOT_SIZE, COLOR_FRAME);
+    fill(x + SLOT_PAD,  y + SLOT_PAD,  x + SLOT_SIZE - SLOT_PAD, y + SLOT_SIZE - SLOT_PAD, COLOR_SLOT);
+}
+
 void DesktopChestScreen::render(int xm, int ym, float a) {
-    Tesselator& t = Tesselator::instance;
-
     fill(0, 0, width, height, 0x60101020);
-
-   guiBackground->setSize((float)bgW, (float)bgH);
-   guiBackground->draw(t, (float)bgX, (float)bgY);
+    fill(bgX - 1, bgY - 1, bgX + bgW + 1, bgY + bgH + 1, COLOR_FRAME);
+    fill(bgX,     bgY,     bgX + bgW,     bgY + bgH,     COLOR_BG);
 
     minecraft->font->drawShadow(std::string("Chest"), (float)(bgX + 8), (float)(bgY + 6), COLOR_TEXT);
 
-    guiSlot->setSize((float)SLOT_SIZE, (float)SLOT_SIZE);
     for (int i = 0; i < (int)slots.size(); ++i)
-        guiSlot->draw(t, (float)slots[i].x, (float)slots[i].y);
+        renderSlotBg(slots[i].x, slots[i].y);
 
     for (int i = 0; i < (int)slots.size(); ++i) {
         const Slot& s = slots[i];
@@ -213,52 +184,22 @@ void DesktopChestScreen::render(int xm, int ym, float a) {
         ItemInstance* live = s.container->getItem(s.slotIndex);
         if (!live || live->isNull()) continue;
         ItemRenderer::renderGuiItem(minecraft->font, minecraft->textures, live,
-            (float)(s.x + SLOT_PAD), (float)(s.y + SLOT_PAD), true);
+            (float)(s.x + SLOT_PAD), (float)(s.y + SLOT_PAD + 1), true);
+        minecraft->gui.renderSlotText(live, (float)(s.x + SLOT_PAD - 3), (float)(s.y + SLOT_PAD - 3), true, true);
     }
 
     int hov = findSlotAt(xm, ym);
     if (hov >= 0) {
         const Slot& s = slots[hov];
-        guiSlotMarker->setSize((float)SLOT_SIZE + 4, (float)SLOT_SIZE + 4);
-        guiSlotMarker->draw(t, (float)(s.x - 2), (float)(s.y - 2));
+        fill(s.x + SLOT_PAD, s.y + SLOT_PAD, s.x + SLOT_SIZE - SLOT_PAD, s.y + SLOT_SIZE - SLOT_PAD, COLOR_HOVER);
     }
 
     if (!cursorItem.isNull()) {
         ItemRenderer::renderGuiItem(minecraft->font, minecraft->textures, &cursorItem,
             (float)(xm - SLOT_INNER / 2), (float)(ym - SLOT_INNER / 2 + 1), true);
-    }
-
-    t.beginOverride();
-    for (int i = 0; i < (int)slots.size(); ++i) {
-        const Slot& s = slots[i];
-        if (s.slotIndex < 0) continue;
-        ItemInstance* live = s.container->getItem(s.slotIndex);
-        if (!live || live->isNull()) continue;
-        if (live->isDamaged()) {
-            ItemRenderer::renderGuiItemDecorations(live, (float)(s.x + 1), (float)(s.y + 1));
-        }
-    }
-    if (!cursorItem.isNull() && cursorItem.isDamaged()) {
-        ItemRenderer::renderGuiItemDecorations(&cursorItem,
-            (float)(xm - SLOT_INNER / 2 + 1), (float)(ym - SLOT_INNER / 2 + 1));
-    }
-    glDisable2(GL_TEXTURE_2D);
-    t.endOverrideAndDraw();
-    glEnable2(GL_TEXTURE_2D);
-
-    for (int i = 0; i < (int)slots.size(); ++i) {
-        const Slot& s = slots[i];
-        if (s.slotIndex < 0) continue;
-        ItemInstance* live = s.container->getItem(s.slotIndex);
-        if (!live || live->isNull()) continue;
-        minecraft->gui.renderSlotText(live, (float)(s.x + SLOT_PAD - 3), (float)(s.y + SLOT_PAD - 3), true, true);
-    }
-    if (!cursorItem.isNull()) {
         minecraft->gui.renderSlotText(&cursorItem,
             (float)(xm - SLOT_INNER / 2 - 3), (float)(ym - SLOT_INNER / 2 - 3), true, true);
     }
-
-    super::render(xm, ym, a);
 
     if (hov >= 0 && cursorItem.isNull()) {
         const Slot& s = slots[hov];
@@ -278,6 +219,8 @@ void DesktopChestScreen::render(int xm, int ym, float a) {
             }
         }
     }
+
+    super::render(xm, ym, a);
 }
 
 void DesktopChestScreen::mouseClicked(int x, int y, int buttonNum) {
@@ -314,6 +257,7 @@ void DesktopChestScreen::mouseClicked(int x, int y, int buttonNum) {
 void DesktopChestScreen::onSlotClick(int idx, int buttonNum, bool shift) {
     Slot& s = slots[idx];
 
+    // Empty hotbar sentinel: place into a free inventory slot + create link.
     if (s.slotIndex < 0) {
         if (cursorItem.isNull()) return;
         if (idx < hotbarSlotsBegin || idx >= hotbarSlotsEnd) return;
@@ -381,7 +325,7 @@ void DesktopChestScreen::onSlotClick(int idx, int buttonNum, bool shift) {
                 cursorItem = slotItem;
             }
         }
-    } else {
+    } else {  // ACTION_RIGHT
         if (cursorItem.isNull() && !slotItem.isNull()) {
             int take = (slotItem.count + 1) / 2;
             cursorItem = slotItem;
@@ -447,8 +391,13 @@ void DesktopChestScreen::shiftClickFrom(int idx) {
     if (!live || live->isNull()) return;
     ItemInstance moving = *live;
 
+    // Java rules:
+    //  - From chest -> player inventory (hotbar first, then main inv)
+    //  - From player hotbar/inv -> chest
+    int destBegin = -1, destEnd = -1;
     bool fromChest = (idx >= chestSlotsBegin && idx < chestSlotsEnd);
     if (fromChest) {
+        // First try hotbar, then main inv
         ItemInstance moving1 = moving;
         tryDistributeStack(moving1, hotbarSlotsBegin, hotbarSlotsEnd);
         if (!moving1.isNull())
@@ -461,8 +410,11 @@ void DesktopChestScreen::shiftClickFrom(int idx) {
         return;
     }
 
+    // From player side: send to chest
+    destBegin = chestSlotsBegin;
+    destEnd   = chestSlotsEnd;
     ItemInstance remainder = moving;
-    tryDistributeStack(remainder, chestSlotsBegin, chestSlotsEnd);
+    tryDistributeStack(remainder, destBegin, destEnd);
     writeSlot(s.container, s.slotIndex, remainder);
 }
 
@@ -472,14 +424,6 @@ void DesktopChestScreen::keyPressed(int eventKey) {
         return;
     }
     super::keyPressed(eventKey);
-}
-
-void DesktopChestScreen::buttonClicked(Button* button) {
-    if (button == btnClose) {
-        if (minecraft->player) minecraft->player->closeContainer();
-        return;
-    }
-    super::buttonClicked(button);
 }
 
 void DesktopChestScreen::removed() {
