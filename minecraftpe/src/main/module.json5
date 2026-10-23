@@ -14,7 +14,10 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    // openLink() 打开网页前要先在这里声明用到的 scheme，否则系统会以
+    // 16000019（No matching ability）拒绝。Credits 里的链接都是 http(s)。
     "querySchemes": [
+      "http",
       "https"
     ],
     "abilities": [
