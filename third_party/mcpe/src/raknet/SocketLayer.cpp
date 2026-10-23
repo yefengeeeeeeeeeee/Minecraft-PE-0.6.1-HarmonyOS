@@ -36,6 +36,7 @@ SocketLayerOverride *SocketLayer::slo=0;
 #endif
 #include <netinet/in.h>
 #include <net/if.h>
+#include <netdb.h>    // getaddrinfo / gethostbyname / struct hostent
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -853,7 +854,9 @@ const char* SocketLayer::DomainNameToIP_Old( const char *domainName )
 		struct addrinfo* dnsResult = 0;
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_INET;        // RakNet 这里只处理 IPv4
-		hints.ai_socktype = SOCK_DGRAM;
+		// 注意：不要设置 ai_socktype / ai_protocol / ai_flags。
+		// netd 的 DNS 查询不应该被 socket 类型约束，某些实现里
+		// 设了 SOCK_DGRAM 反而会返回 2100002/401 导致解析失败。
 
 		int32_t rc = OH_NetConn_GetAddrInfo((char*)domainName, NULL, &hints, &dnsResult, 0);
 		if (rc == 0 && dnsResult != 0 && dnsResult->ai_addr != 0) {
@@ -880,8 +883,30 @@ const char* SocketLayer::DomainNameToIP_Old( const char *domainName )
 	if ( phe == 0 || phe->h_addr_list[ 0 ] == 0 )
 	{
 #if defined(OHOS)
+		OH_LOG_Print(LOG_APP, LOG_WARN, MCPE_NET_DOMAIN, MCPE_NET_TAG,
+			"DNS %{public}s failed via gethostbyname, fallback to getaddrinfo", domainName);
+#endif
+		// gethostbyname 在 OHOS 沙箱里经常失败，再补一层标准 POSIX 的
+		// getaddrinfo 作为最后的兜底（线程安全、也更可靠）。
+		struct addrinfo hints;
+		struct addrinfo* res = 0;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;
+		if (getaddrinfo(domainName, NULL, &hints, &res) == 0 && res != 0) {
+			static char gaIp[INET_ADDRSTRLEN];
+			struct sockaddr_in* sa = (struct sockaddr_in*)res->ai_addr;
+			inet_ntop(AF_INET, &sa->sin_addr, gaIp, sizeof(gaIp));
+#if defined(OHOS)
+			OH_LOG_Print(LOG_APP, LOG_INFO, MCPE_NET_DOMAIN, MCPE_NET_TAG,
+				"DNS %{public}s -> %{public}s (getaddrinfo)", domainName, gaIp);
+#endif
+			freeaddrinfo(res);
+			return gaIp;
+		}
+		if (res != 0) freeaddrinfo(res);
+#if defined(OHOS)
 		OH_LOG_Print(LOG_APP, LOG_ERROR, MCPE_NET_DOMAIN, MCPE_NET_TAG,
-			"DNS %{public}s failed via gethostbyname", domainName);
+			"DNS %{public}s failed via getaddrinfo too", domainName);
 #endif
 		//cerr << "Yow! Bad host lookup." << endl;
 		return 0;
