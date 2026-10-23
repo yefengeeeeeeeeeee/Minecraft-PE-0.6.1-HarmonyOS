@@ -1,2 +1,9 @@
 .git/
 *.class
+build/
+.cxx/
+.codegenie/
+.codegraph/
+.hvigor/
+.idea/
+.DS_Store
