@@ -30,14 +30,7 @@ Screen* ScreenChooser::createScreen( ScreenId id )
 		case SCREEN_JOINGAME:	     screen = new Touch::JoinGameScreen();	break;
 		case SCREEN_PAUSE:	         screen = new PauseScreen(false); break;
 		case SCREEN_PAUSEPREV:	     screen = new PauseScreen(true);	 break;
-		case SCREEN_BLOCKSELECTION:
-			// 创造模式同样走 PC 式创造背包（所有物品含钓鱼竿都会列出）；
-			// 旧版 "Select blocks" 方块选择器只列方块，钓鱼竿等工具永远不出现
-			if (_mc->gameMode && _mc->gameMode->isCreativeType())
-				screen = new DesktopCreativeScreen();
-			else
-				screen = new Touch::IngameBlockSelectionScreen();
-			break;
+		case SCREEN_BLOCKSELECTION:	 screen = new Touch::IngameBlockSelectionScreen();	break;
 		case SCREEN_JOINBYIP:        screen = new JoinByIPScreen(); break;
 		case SCREEN_CONSOLE:		 screen = new ConsoleScreen(); break;
 		case SCREEN_NONE:
