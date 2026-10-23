@@ -11,11 +11,19 @@
 #define LOGI(...) OH_LOG_Print(LOG_APP, LOG_INFO, LOG_DOMAIN, LOGTAG, __VA_ARGS__)
 #define LOGE(...) OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_DOMAIN, LOGTAG, __VA_ARGS__)
 
-#define MAX_SIMULTANEOUS_PLAYERS 24
-
 SoundSystemOHOS::SoundSystemOHOS()
-:   _enabled(true)
+:   _mixer(nullptr),
+    _enabled(true)
 {
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        _voices[i].state.store(0);
+        _voices[i].data = nullptr;
+        _voices[i].totalFrames = 0;
+        _voices[i].channels = 1;
+        _voices[i].pos = 0.0;
+        _voices[i].step = 1.0;
+        _voices[i].volume = 1.0f;
+    }
 }
 
 SoundSystemOHOS::~SoundSystemOHOS()
@@ -25,63 +33,107 @@ SoundSystemOHOS::~SoundSystemOHOS()
 
 void SoundSystemOHOS::enable(bool status)
 {
-    std::lock_guard<std::mutex> lock(_mutex);
-    _enabled = status;
+    _enabled.store(status);
 }
 
 void SoundSystemOHOS::shutdownAll()
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    for (size_t i = 0; i < _players.size(); ++i) {
-        Player* p = _players[i];
-        if (p->renderer) {
-            OH_AudioRenderer_Stop(p->renderer);
-            OH_AudioRenderer_Release(p->renderer);
-        }
-        delete p;
+    if (_mixer) {
+        OH_AudioRenderer_Stop(_mixer);
+        OH_AudioRenderer_Release(_mixer);
+        _mixer = nullptr;
     }
-    _players.clear();
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        _voices[i].state.store(0);
+    }
 }
 
-void SoundSystemOHOS::releaseFinished()
+bool SoundSystemOHOS::ensureMixer()
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    for (size_t i = 0; i < _players.size();) {
-        Player* p = _players[i];
-        if (p->finished) {
-            if (p->renderer) {
-                OH_AudioRenderer_Stop(p->renderer);
-                OH_AudioRenderer_Release(p->renderer);
-            }
-            delete p;
-            _players.erase(_players.begin() + i);
-        } else {
-            ++i;
-        }
+    if (_mixer) {
+        return true;
     }
+
+    OH_AudioStreamBuilder* builder = nullptr;
+    OH_AudioStream_Result res = OH_AudioStreamBuilder_Create(&builder, AUDIOSTREAM_TYPE_RENDERER);
+    if (res != AUDIOCOMMON_RESULT_SUCCESS || !builder) {
+        LOGE("mixer: StreamBuilder_Create failed: %{public}d", res);
+        return false;
+    }
+
+    OH_AudioStreamBuilder_SetSamplingRate(builder, MIX_RATE);
+    OH_AudioStreamBuilder_SetChannelCount(builder, 2);
+    OH_AudioStreamBuilder_SetSampleFormat(builder, AUDIOSTREAM_SAMPLE_S16LE);
+    OH_AudioStreamBuilder_SetEncodingType(builder, AUDIOSTREAM_ENCODING_TYPE_RAW);
+    OH_AudioStreamBuilder_SetLatencyMode(builder, AUDIOSTREAM_LATENCY_MODE_NORMAL);
+    OH_AudioStreamBuilder_SetRendererInfo(builder, AUDIOSTREAM_USAGE_GAME);
+    OH_AudioStreamBuilder_SetRendererWriteDataCallbackAdvanced(builder, SoundSystemOHOS::onMixWrite, this);
+
+    res = OH_AudioStreamBuilder_GenerateRenderer(builder, &_mixer);
+    OH_AudioStreamBuilder_Destroy(builder);
+    if (res != AUDIOCOMMON_RESULT_SUCCESS || !_mixer) {
+        LOGE("mixer: GenerateRenderer failed: %{public}d", res);
+        return false;
+    }
+
+    res = OH_AudioRenderer_Start(_mixer);
+    if (res != AUDIOCOMMON_RESULT_SUCCESS) {
+        LOGE("mixer: Start failed: %{public}d", res);
+        OH_AudioRenderer_Release(_mixer);
+        _mixer = nullptr;
+        return false;
+    }
+
+    LOGI("mixer ready: %{public}dHz stereo, %{public}d voices", MIX_RATE, NUM_VOICES);
+    return true;
 }
 
-int32_t SoundSystemOHOS::onWriteData(OH_AudioRenderer* renderer, void* userData, void* audioData, int32_t audioDataSize)
+// 混音线程回调：把所有活跃 Voice 就近重采样后饱和累加进输出。
+// 只读 Voice 的 data/pos/step/volume/channels，交接靠 state 的 acquire/release。
+int32_t SoundSystemOHOS::onMixWrite(OH_AudioRenderer* renderer, void* userData, void* audioData, int32_t audioDataSize)
 {
-    Player* p = (Player*)userData;
-    if (!p || p->finished || audioDataSize <= 0) {
+    SoundSystemOHOS* self = (SoundSystemOHOS*)userData;
+    if (!self || audioDataSize <= 0) {
         return 0;
     }
 
+    int16_t* out = (int16_t*)audioData;
+    int samples = audioDataSize / (int)sizeof(int16_t);
+    memset(out, 0, audioDataSize);
 
-    int toCopy = p->remainingBytes < audioDataSize ? p->remainingBytes : audioDataSize;
-    if (toCopy > 0) {
-        memcpy(audioData, p->data, toCopy);
-        p->data += toCopy;
-        p->remainingBytes -= toCopy;
+    if (!self->_enabled.load(std::memory_order_relaxed)) {
+        return audioDataSize;
     }
 
-    if (p->remainingBytes <= 0) {
-        p->finished = true;
-        return 0;
+    for (int v = 0; v < NUM_VOICES; ++v) {
+        Voice& vo = self->_voices[v];
+        if (vo.state.load(std::memory_order_acquire) != 1) {
+            continue;
+        }
+
+        const int16_t* src = (const int16_t*)vo.data;
+        int frames = samples / 2;   // 输出固定双声道
+        for (int f = 0; f < frames; ++f) {
+            int idx = (int)vo.pos;
+            if (idx >= vo.totalFrames) {
+                vo.state.store(0, std::memory_order_release);
+                break;
+            }
+            int16_t l = src[idx * vo.channels];
+            int16_t r = (vo.channels >= 2) ? src[idx * vo.channels + 1] : l;
+
+            int mixL = out[f * 2]     + (int)(l * vo.volume);
+            int mixR = out[f * 2 + 1] + (int)(r * vo.volume);
+            out[f * 2]     = (int16_t)(mixL > 32767 ? 32767 : (mixL < -32768 ? -32768 : mixL));
+            out[f * 2 + 1] = (int16_t)(mixR > 32767 ? 32767 : (mixR < -32768 ? -32768 : mixR));
+
+            vo.pos += vo.step;
+        }
     }
 
-    return toCopy;
+    return audioDataSize;
 }
 
 void SoundSystemOHOS::playAt(const SoundDesc& desc, float x, float y, float z, float volume, float pitch)
@@ -89,62 +141,39 @@ void SoundSystemOHOS::playAt(const SoundDesc& desc, float x, float y, float z, f
     if (!desc.isValid() || !desc.frames || desc.size <= 0) {
         return;
     }
+    if (desc.channels != 1 && desc.channels != 2) {
+        return;
+    }
 
-    LOGI("playAt called: rate=%d ch=%d size=%d vol=%.2f pitch=%.2f", desc.frameRate, desc.channels, desc.size, volume, pitch);
-
-    releaseFinished();
+    if (!ensureMixer()) {
+        return;
+    }
 
     std::lock_guard<std::mutex> lock(_mutex);
-    if (!_enabled || _players.size() >= MAX_SIMULTANEOUS_PLAYERS) {
+    if (!_enabled.load()) {
         return;
     }
 
-    Player* p = new Player();
-    p->renderer = nullptr;
-    p->data = desc.frames;
-    p->remainingBytes = desc.size;
-    p->frameRate = desc.frameRate;
-    p->channels = desc.channels;
-    p->finished = false;
-
-    OH_AudioStreamBuilder* builder = nullptr;
-    OH_AudioStream_Result res = OH_AudioStreamBuilder_Create(&builder, AUDIOSTREAM_TYPE_RENDERER);
-    if (res != AUDIOCOMMON_RESULT_SUCCESS || !builder) {
-        LOGE("OH_AudioStreamBuilder_Create failed: %{public}d", res);
-        delete p;
+    int totalFrames = desc.size / (2 * desc.channels);  // S16LE
+    if (totalFrames <= 0) {
         return;
     }
 
-    OH_AudioStreamBuilder_SetSamplingRate(builder, desc.frameRate);
-    OH_AudioStreamBuilder_SetChannelCount(builder, desc.channels);
-    OH_AudioStreamBuilder_SetSampleFormat(builder, AUDIOSTREAM_SAMPLE_S16LE);
-    OH_AudioStreamBuilder_SetEncodingType(builder, AUDIOSTREAM_ENCODING_TYPE_RAW);
-    OH_AudioStreamBuilder_SetLatencyMode(builder, AUDIOSTREAM_LATENCY_MODE_NORMAL);
-    OH_AudioStreamBuilder_SetRendererInfo(builder, AUDIOSTREAM_USAGE_GAME);
-    OH_AudioStreamBuilder_SetRendererWriteDataCallbackAdvanced(builder, SoundSystemOHOS::onWriteData, p);
-
-    res = OH_AudioStreamBuilder_GenerateRenderer(builder, &p->renderer);
-    OH_AudioStreamBuilder_Destroy(builder);
-    if (res != AUDIOCOMMON_RESULT_SUCCESS || !p->renderer) {
-        LOGE("OH_AudioStreamBuilder_GenerateRenderer failed: %{public}d", res);
-        delete p;
+    for (int v = 0; v < NUM_VOICES; ++v) {
+        Voice& vo = _voices[v];
+        if (vo.state.load(std::memory_order_acquire) != 0) {
+            continue;
+        }
+        vo.data = desc.frames;
+        vo.totalFrames = totalFrames;
+        vo.channels = desc.channels;
+        vo.pos = 0.0;
+        vo.step = (double)desc.frameRate / (double)MIX_RATE
+                  * ((pitch > 0.01f && pitch != 1.0f) ? pitch : 1.0f);
+        vo.volume = volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume);
+        vo.state.store(1, std::memory_order_release);
         return;
     }
 
-    float vol = volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume);
-    OH_AudioRenderer_SetVolume(p->renderer, vol);
-
-    if (pitch > 0.01f && pitch != 1.0f) {
-        OH_AudioRenderer_SetSpeed(p->renderer, pitch);
-    }
-
-    res = OH_AudioRenderer_Start(p->renderer);
-    if (res != AUDIOCOMMON_RESULT_SUCCESS) {
-        LOGE("OH_AudioRenderer_Start failed: %{public}d", res);
-        OH_AudioRenderer_Release(p->renderer);
-        delete p;
-        return;
-    }
-
-    _players.push_back(p);
+    // 32 个 voice 全忙：丢弃（原实现超 24 个渲染器时同样是丢弃）
 }

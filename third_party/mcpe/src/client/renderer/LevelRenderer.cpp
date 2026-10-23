@@ -777,10 +777,24 @@ bool LevelRenderer::updateDirtyChunks( Mob* player, bool force )
 				std::sort(nearChunks->begin(), nearChunks->end(), dirtyChunkSorter);
 			}
 
+			// 真机修复：这里原本对近处（<32 格）脏区块**无上限地逐个 rebuild**，
+			// 走路跨区块时一批近处区块同帧全建，单帧能吃掉 50-100ms（帧率直接掉到 30 以下）。
+			// 桌面 CPU 掩盖了它，手机上就是"走动一顿一顿、原地很流畅"。
+			// 现在同样吃下面的 MaxFrameTime 预算：每帧至少建 1 个保证脚下推进，
+			// 超预算的塞回 dirtyChunks，下一帧接着建。
+			int rebuiltNear = 0;
 			for (int i = nearChunks->size() - 1; i >= 0; i--) {
 				Chunk* chunk = (*nearChunks)[i];
+				float ttt = chunkWatch.stopContinue();
+				if (rebuiltNear > 0 && ttt >= MaxFrameTime) {
+					for (int j = i; j >= 0; j--) {
+						dirtyChunks.push_back((*nearChunks)[j]);
+					}
+					break;
+				}
 				chunk->rebuild();
 				chunk->setClean();
+				++rebuiltNear;
 			}
 			delete nearChunks;
 		}

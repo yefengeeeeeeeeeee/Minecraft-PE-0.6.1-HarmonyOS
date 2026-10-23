@@ -15,6 +15,7 @@
 #include "napi/native_api.h"
 
 #include <mutex>
+#include <chrono>
 #include "sys/stat.h"
 #include <string>
 #include <cstring>
@@ -297,6 +298,19 @@ static napi_value RenderFrame(napi_env env, napi_callback_info info)
                 LOGE("RenderFrame: eglMakeCurrent FAILED err=0x%{public}x", eglGetError());
             }
             return nullptr;
+        }
+    }
+    // 慢帧探针：>50ms 的帧记录耗时，用于真机卡顿归因
+    {
+        static std::chrono::steady_clock::time_point s_t0 = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(now - s_t0).count();
+        s_t0 = now;
+        if (ms > 50.0) {
+            static int s_slowLogged = 0;
+            if ((s_slowLogged++ % 10) == 0) {
+                LOGE("frame SLOW: %{public}.1fms (count=%{public}d)", ms, s_slowLogged);
+            }
         }
     }
     g_engine.app->update();

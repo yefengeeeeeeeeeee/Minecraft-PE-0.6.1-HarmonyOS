@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.5.0)
 project(mcpe)
 
+# 真机性能关键：hvigor debug 默认给 -O0，区块生成/网格化会拖出几十毫秒的长帧
+# （表现为走路一顿一顿，模拟器的桌面 CPU 掩盖了这个问题）。
+# 无论外部构建类型是什么，都按 O2 编译；-g 保留以便崩溃符号化。
+set(CMAKE_C_FLAGS_DEBUG "-O2 -g -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g -DNDEBUG")
+
 set(NATIVERENDER_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 set(MCPE_SRC_ROOT ${NATIVERENDER_ROOT_PATH}/../../../../third_party/mcpe/src)
 

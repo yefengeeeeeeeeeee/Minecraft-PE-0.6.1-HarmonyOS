@@ -9,6 +9,15 @@
 #include "../Level.h"
 #include "../LevelConstants.h"
 
+// 临时探针：量化新区块"生成/载入+光照"的真实开销（真机卡顿排查）
+#if defined(OHOS)
+#include <hilog/log.h>
+#include <chrono>
+#define CCLOG(...) OH_LOG_Print(LOG_APP, LOG_ERROR, 0, "MCPE-CHUNK", __VA_ARGS__)
+#else
+#define CCLOG(...)
+#endif
+
 class ChunkCache: public ChunkSource {
     //static const int CHUNK_CACHE_WIDTH = CHUNK_CACHE_WIDTH; // WAS 32;
     static const int MAX_SAVES = 2;
@@ -75,6 +84,7 @@ public:
         int zs = z & (CHUNK_CACHE_WIDTH - 1);
         int slot = xs + zs * CHUNK_CACHE_WIDTH;
         if (!hasChunk(x, z)) {
+            std::chrono::steady_clock::time_point _t0 = std::chrono::steady_clock::now();
             if (chunks[slot] != NULL) {
                 chunks[slot]->unload();
                 save(chunks[slot]);
@@ -122,6 +132,12 @@ public:
             if (hasChunk(x - 1, z) && !getChunk(x - 1, z)->terrainPopulated && hasChunk(x - 1, z + 1) && hasChunk(x, z + 1) && hasChunk(x - 1, z)) postProcess(this, x - 1, z);
             if (hasChunk(x, z - 1) && !getChunk(x, z - 1)->terrainPopulated && hasChunk(x + 1, z - 1) && hasChunk(x, z - 1) && hasChunk(x + 1, z)) postProcess(this, x, z - 1);
             if (hasChunk(x - 1, z - 1) && !getChunk(x - 1, z - 1)->terrainPopulated && hasChunk(x - 1, z - 1) && hasChunk(x, z - 1) && hasChunk(x - 1, z)) postProcess(this, x - 1, z - 1);
+
+            double _ms = std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - _t0).count();
+            if (_ms > 10.0) {
+                CCLOG("chunk load/gen SLOW: (%d,%d) took %.1fms", x, z, _ms);
+            }
         }
         xLast = x;
         zLast = z;
