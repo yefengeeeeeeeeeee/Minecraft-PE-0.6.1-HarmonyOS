@@ -52,8 +52,15 @@ Gui::Gui(Minecraft* minecraft)
 	_currentDropTicks(-1),
 	_currentDropSlot(-1),
 	MAX_MESSAGE_WIDTH(240),
-	itemNameOverlayTime(2),
-	_openInventorySlot(minecraft->useTouchscreen())
+	itemNameOverlayTime(2)
+	// OHOS 只有触摸交互，"..."背包槽必须常驻。
+	// 原值 useTouchscreen() 依赖 Options/支持标志的构造顺序，
+	// 一旦在构造早期取到 false，整个进程就永远没有背包入口。
+#ifdef OHOS
+	, _openInventorySlot(true)
+#else
+	, _openInventorySlot(minecraft->useTouchscreen())
+#endif
 {
 	glGenBuffers2(1, &_inventoryRc.vboId);
 	glGenBuffers2(1, &rcFeedbackInner.vboId);
