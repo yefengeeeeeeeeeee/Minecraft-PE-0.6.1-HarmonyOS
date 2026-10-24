@@ -513,11 +513,12 @@ void TouchscreenInput_TestFps::rebuild() {
 	}
 	
 	if (!_minecraft->screen) {
-		t.colorABGR(0xFFFFFFFF);
-		// if (isButtonDown(AREA_PAUSE))  t.colorABGR(cPressedPause);
-		// else						   t.colorABGR(cReleasedPause);
+		// 聊天/暂停按钮与方向键保持一致的半透明样式
+		if (isButtonDown(AREA_PAUSE))  t.colorABGR(cPressed);
+		else						   t.colorABGR(cReleased);
 		
         drawRectangleArea(t, aPause, 200, 64, 18.0f);
+		t.colorABGR(cReleased);
 		drawRectangleArea(t, aChat,  200, 82, 18.0f);
 	}
 //t.end(true, _bufferId);
