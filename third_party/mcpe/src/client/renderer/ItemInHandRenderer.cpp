@@ -160,11 +160,8 @@ void ItemInHandRenderer::renderItem(Mob* mob,  ItemInstance* item )
 			t.color(0xff, 0xff, 0xff);
 			const int up = itemIcon & 15;
 			const int vp = itemIcon >> 4;
-			// 手持图标 UV 与插槽栏 renderGuiItemCorrect/blit 保持一致：
-			// 世界坐标 x 从左到右递增时，u 也应从左边缘(u0)到右边缘(u1)递增。
-			// 原实现把 u0/u1 赋反了，导致手持物品图标相对插槽栏水平镜像。
-			float u0 = (up * 16 + 0.00f) / 256.0f;
-			float u1 = (up * 16 + 15.99f) / 256.0f;
+			float u1 = (up * 16 + 0.00f) / 256.0f;
+			float u0 = (up * 16 + 15.99f) / 256.0f;
 			float v0 = (vp * 16 + 0.00f) / 256.0f;
 			float v1 = (vp * 16 + 15.99f) / 256.0f;
 
