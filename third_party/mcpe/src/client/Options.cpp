@@ -70,7 +70,7 @@ OptionBool useTouchscreen("useTouchscreen", true);
 
 OptionBool serverVisible("servervisible", true);
 
-OptionBool foliageTint("foliagetint", true);
+OptionBool foliageTint("foliagetint", false);
 
 OptionInt fogType("fogType", 0, 0, 2);
 

@@ -220,6 +220,7 @@ void PreseedOptionsFile(const std::string& filesDir)
     fprintf(f, "options.firstLaunch:false\n");
     fprintf(f, "options.username:SteveOHOS\n");
     fprintf(f, "options.useTouchscreen:true\n");
+    fprintf(f, "options.foliagetint:false\n");
     fclose(f);
     LOGI("PreseedOptionsFile written: %{public}s", path.c_str());
 }
